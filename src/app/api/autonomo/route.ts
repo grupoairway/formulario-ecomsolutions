@@ -123,79 +123,113 @@ async function sendEmails(data: AutonomoFormData) {
   await Promise.allSettled(promises);
 }
 
+function normalizeMutua(mutua: string): string {
+  const upper = mutua.toUpperCase();
+  if (upper.includes('ASEPEYO')) return 'ASEPEYO';
+  if (upper.includes('FREMAP')) return 'FREMAP';
+  return 'Otra';
+}
+
+function tipoDocLabel(tipo: string): string {
+  if (tipo === 'dni') return 'DNI';
+  if (tipo === 'nie_comunitario') return 'NIE comunitario';
+  if (tipo === 'nie_extracomunitario') return 'NIE extracomunitario';
+  return tipo;
+}
+
+async function createNotionPage(data: AutonomoFormData): Promise<void> {
+  const dbId = process.env.NOTION_AUTONOMOS_DB || '365774ba2799801094aaf402e58fa87e';
+  const today = new Date().toISOString().split('T')[0];
+  const fechaInicio = data.cuantoAntes ? today : (data.fechaInicio || today);
+  const ingresos = parseFloat(data.ingresosNetos.replace(',', '.'));
+
+  await notion.pages.create({
+    parent: { database_id: dbId },
+    properties: {
+      'Nombre': {
+        title: [{ text: { content: getTitle(data) } }],
+      },
+      'Estado': {
+        select: { name: 'Nuevo' },
+      },
+      'Fecha envío': {
+        date: { start: today },
+      },
+      'Fecha nacimiento': {
+        date: data.fechaNacimiento ? { start: data.fechaNacimiento } : null,
+      },
+      'Nacionalidad': {
+        rich_text: richText(data.nacionalidad),
+      },
+      'DNI/NIE': {
+        rich_text: richText(data.numeroDocumento),
+      },
+      'Tipo documento': {
+        select: { name: tipoDocLabel(data.tipoDocumento) },
+      },
+      'Domicilio': {
+        rich_text: richText(domicilioTexto(data)),
+      },
+      'Teléfono': {
+        phone_number: data.telefono || null,
+      },
+      'Email': {
+        email: data.email || null,
+      },
+      'Estado civil': {
+        select: data.estadoCivil ? { name: data.estadoCivil } : null,
+      },
+      'Actividad': {
+        rich_text: richText(data.descripcionActividad),
+      },
+      'Fecha inicio': {
+        date: { start: fechaInicio },
+      },
+      'ROI': {
+        checkbox: data.roi === true,
+      },
+      'Epígrafe IAE': {
+        rich_text: richText(data.epigrafeIAE),
+      },
+      'Nº afiliación SS': {
+        rich_text: richText(data.numeroAfiliacionSS),
+      },
+      'Mutua': {
+        select: data.mutua ? { name: normalizeMutua(data.mutua) } : null,
+      },
+      'IBAN': {
+        rich_text: richText(data.iban),
+      },
+      'Ingresos mensuales': {
+        number: isNaN(ingresos) ? null : ingresos,
+      },
+      'Tarifa reducida': {
+        checkbox: data.noAltaDosAnios && data.sinDeudasSS,
+      },
+    } as Parameters<typeof notion.pages.create>[0]['properties'],
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const data: AutonomoFormData = await request.json();
-    const dbId = process.env.NOTION_AUTONOMOS_DB || '365774ba2799801094aaf402e58fa87e';
 
-    const title = getTitle(data);
-    const today = new Date().toISOString().split('T')[0];
-
-    await notion.pages.create({
-      parent: { database_id: dbId },
-      properties: {
-        'Nombre': {
-          title: [{ text: { content: title } }],
-        },
-        'Estado': {
-          select: { name: 'Nuevo' },
-        },
-        'Formulario completado': {
-          checkbox: true,
-        },
-        'Fecha formulario': {
-          date: { start: today },
-        },
-        'Email solicitante': {
-          email: data.email || null,
-        },
-        'Teléfono': {
-          phone_number: data.telefono || null,
-        },
-        'DNI/NIE': {
-          rich_text: richText(`${data.numeroDocumento} (${data.tipoDocumento})`),
-        },
-        'Domicilio': {
-          rich_text: richText(domicilioTexto(data)),
-        },
-        'Provincia': {
-          rich_text: richText(data.domicilio.provincia),
-        },
-        'Actividad': {
-          rich_text: richText(data.descripcionActividad),
-        },
-        'Epígrafe IAE': {
-          rich_text: richText(data.epigrafeIAE),
-        },
-        'Fecha inicio': {
-          rich_text: richText(data.cuantoAntes ? 'Cuanto antes' : data.fechaInicio),
-        },
-        'ROI intracomunitario': {
-          checkbox: data.roi === true,
-        },
-        'Mutua': {
-          rich_text: richText(data.mutua),
-        },
-        'IBAN': {
-          rich_text: richText(data.iban),
-        },
-        'Ingresos netos estimados': {
-          rich_text: richText(data.ingresosNetos ? `${data.ingresosNetos} €/mes` : ''),
-        },
-        'Tarifa reducida': {
-          checkbox: data.noAltaDosAnios && data.sinDeudasSS,
-        },
-        'Número afiliación SS': {
-          rich_text: richText(data.numeroAfiliacionSS),
-        },
-      } as Parameters<typeof notion.pages.create>[0]['properties'],
+    // Notion y email son independientes: un fallo en Notion no bloquea el envío de emails
+    await createNotionPage(data).catch((err: { code?: string; message?: string; body?: string }) => {
+      console.error('[/api/autonomo] Notion FAILED —', {
+        code: err?.code,
+        message: err?.message,
+        body: err?.body,
+      });
     });
 
-    await sendEmails(data);
+    await sendEmails(data).catch((err: { message?: string }) => {
+      console.error('[/api/autonomo] Email FAILED —', err?.message);
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error('[/api/autonomo]', err);
+    console.error('[/api/autonomo] Fatal error:', err);
     return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
   }
 }
