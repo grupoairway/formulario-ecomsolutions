@@ -126,7 +126,7 @@ async function sendEmails(data: AutonomoFormData) {
 export async function POST(request: NextRequest) {
   try {
     const data: AutonomoFormData = await request.json();
-    const dbId = process.env.NOTION_AUTONOMOS_DB || '35f774ba2799808aa510cb7782955758';
+    const dbId = process.env.NOTION_AUTONOMOS_DB || '365774ba2799801094aaf402e58fa87e';
 
     const title = getTitle(data);
     const today = new Date().toISOString().split('T')[0];
