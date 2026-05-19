@@ -43,12 +43,37 @@ function buildAttachments(data: AutonomoFormData): MailAttachment[] {
 
 async function sendEmails(data: AutonomoFormData) {
   const title = getTitle(data);
+
+  // ── Diagnóstico variables de entorno ──────────────────────────────────────
+  const smtpUser = 'noreply@ecomsolutions.es';
+  const smtpPass = process.env.SMTP_PASSWORD;
+  console.log('[email] Config SMTP:', {
+    host: 'smtp.hostinger.com',
+    port: 465,
+    secure: true,
+    user: smtpUser,
+    passSet: !!smtpPass,
+    passLen: smtpPass?.length ?? 0,
+  });
+  if (!smtpPass) {
+    console.error('[email] ERROR: SMTP_PASSWORD no está definida en las variables de entorno.');
+  }
+
   const transporter = nodemailer.createTransport({
     host: 'smtp.hostinger.com',
     port: 465,
     secure: true,
-    auth: { user: 'noreply@ecomsolutions.es', pass: process.env.SMTP_PASSWORD },
+    auth: { user: smtpUser, pass: smtpPass },
   });
+
+  // Verificar conexión SMTP antes de enviar
+  try {
+    await transporter.verify();
+    console.log('[email] Conexión SMTP verificada correctamente.');
+  } catch (verifyErr) {
+    const e = verifyErr as Error;
+    console.error('[email] ERROR verificando conexión SMTP:', e.message);
+  }
 
   const clientHtml = `
     <div style="font-family: Inter, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
@@ -177,31 +202,52 @@ async function sendEmails(data: AutonomoFormData) {
   `;
 
   const attachments = buildAttachments(data);
+  console.log('[email] Adjuntos preparados:', attachments.length, '—', attachments.map((a) => a.filename).join(', ') || 'ninguno');
 
-  const promises: Promise<unknown>[] = [];
-
+  // ── Email al cliente ───────────────────────────────────────────────────────
   if (data.email) {
-    promises.push(
-      transporter.sendMail({
+    console.log('[email] Intentando enviar email al cliente:', data.email);
+    try {
+      const info = await transporter.sendMail({
         from: '"EcomSolutions" <noreply@ecomsolutions.es>',
         to: data.email,
         subject: '✅ Solicitud de alta de autónomo recibida',
         html: clientHtml,
-      })
-    );
+      });
+      console.log('[email] Email cliente enviado OK. messageId:', info.messageId, '| response:', info.response);
+    } catch (err) {
+      const e = err as Error & { code?: string; responseCode?: number; response?: string };
+      console.error('[email] ERROR enviando al cliente:', {
+        message: e.message,
+        code: e.code,
+        responseCode: e.responseCode,
+        response: e.response,
+      });
+    }
+  } else {
+    console.warn('[email] Sin email de cliente — omitiendo envío al solicitante.');
   }
 
-  promises.push(
-    transporter.sendMail({
+  // ── Email interno ──────────────────────────────────────────────────────────
+  console.log('[email] Intentando enviar email interno a: info@ecomsolutions.es');
+  try {
+    const info = await transporter.sendMail({
       from: '"Formulario Alta Autónomo" <noreply@ecomsolutions.es>',
       to: 'info@ecomsolutions.es',
       subject: `Nueva solicitud: ${title}`,
       html: notifHtml,
       attachments,
-    })
-  );
-
-  await Promise.allSettled(promises);
+    });
+    console.log('[email] Email interno enviado OK. messageId:', info.messageId, '| response:', info.response);
+  } catch (err) {
+    const e = err as Error & { code?: string; responseCode?: number; response?: string };
+    console.error('[email] ERROR enviando email interno:', {
+      message: e.message,
+      code: e.code,
+      responseCode: e.responseCode,
+      response: e.response,
+    });
+  }
 }
 
 function normalizeMutua(mutua: string): string {
