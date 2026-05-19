@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 import { AutonomoFormData, FileAttachment } from '@/lib/types-autonomo';
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
@@ -19,21 +19,25 @@ function domicilioTexto(data: AutonomoFormData): string {
   return [d.calle, d.numero, d.piso, d.cp, d.municipio, d.provincia].filter(Boolean).join(', ');
 }
 
-type MailAttachment = NonNullable<nodemailer.SendMailOptions['attachments']>[number];
+interface ResendAttachment {
+  filename: string;
+  content: Buffer;
+  content_type: string;
+}
 
-function buildAttachments(data: AutonomoFormData): MailAttachment[] {
-  const attachments: MailAttachment[] = [];
+function buildAttachments(data: AutonomoFormData): ResendAttachment[] {
+  const attachments: ResendAttachment[] = [];
   function addFile(file: FileAttachment | null, label: string) {
     if (!file?.data) return;
-    // Extraer solo la parte base64 después de la coma del data URL
     const base64 = file.data.includes(',') ? file.data.split(',')[1] : file.data;
     if (!base64) return;
+    const buf = Buffer.from(base64, 'base64');
     attachments.push({
       filename: `${label}_${file.name}`,
-      content: Buffer.from(base64, 'base64'),
-      contentType: file.type || 'application/octet-stream',
+      content: buf,
+      content_type: file.type || 'application/octet-stream',
     });
-    console.log(`[/api/autonomo] Adjunto preparado: ${label}_${file.name} (${Math.round(Buffer.from(base64, 'base64').length / 1024)} KB)`);
+    console.log(`[email] Adjunto preparado: ${label}_${file.name} (${Math.round(buf.length / 1024)} KB)`);
   }
   addFile(data.dniAnverso, 'DNI_anverso');
   addFile(data.dniReverso, 'DNI_reverso');
@@ -45,35 +49,13 @@ async function sendEmails(data: AutonomoFormData) {
   const title = getTitle(data);
 
   // ── Diagnóstico variables de entorno ──────────────────────────────────────
-  const smtpUser = 'noreply@ecomsolutions.es';
-  const smtpPass = process.env.SMTP_PASSWORD;
-  console.log('[email] Config SMTP:', {
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    user: smtpUser,
-    passSet: !!smtpPass,
-    passLen: smtpPass?.length ?? 0,
-  });
-  if (!smtpPass) {
-    console.error('[email] ERROR: SMTP_PASSWORD no está definida en las variables de entorno.');
+  const apiKey = process.env.RESEND_API_KEY;
+  console.log('[email] Resend API key set:', !!apiKey, '| len:', apiKey?.length ?? 0);
+  if (!apiKey) {
+    console.error('[email] ERROR: RESEND_API_KEY no está definida. Emails no enviados.');
+    return;
   }
-
-  const transporter = nodemailer.createTransport({
-    host: 'smtp.hostinger.com',
-    port: 465,
-    secure: true,
-    auth: { user: smtpUser, pass: smtpPass },
-  });
-
-  // Verificar conexión SMTP antes de enviar
-  try {
-    await transporter.verify();
-    console.log('[email] Conexión SMTP verificada correctamente.');
-  } catch (verifyErr) {
-    const e = verifyErr as Error;
-    console.error('[email] ERROR verificando conexión SMTP:', e.message);
-  }
+  const resend = new Resend(apiKey);
 
   const clientHtml = `
     <div style="font-family: Inter, sans-serif; max-width: 600px; margin: 0 auto; color: #111827;">
@@ -207,22 +189,16 @@ async function sendEmails(data: AutonomoFormData) {
   // ── Email al cliente ───────────────────────────────────────────────────────
   if (data.email) {
     console.log('[email] Intentando enviar email al cliente:', data.email);
-    try {
-      const info = await transporter.sendMail({
-        from: '"EcomSolutions" <noreply@ecomsolutions.es>',
-        to: data.email,
-        subject: '✅ Solicitud de alta de autónomo recibida',
-        html: clientHtml,
-      });
-      console.log('[email] Email cliente enviado OK. messageId:', info.messageId, '| response:', info.response);
-    } catch (err) {
-      const e = err as Error & { code?: string; responseCode?: number; response?: string };
-      console.error('[email] ERROR enviando al cliente:', {
-        message: e.message,
-        code: e.code,
-        responseCode: e.responseCode,
-        response: e.response,
-      });
+    const { data: sent, error } = await resend.emails.send({
+      from: 'EcomSolutions <noreply@ecomsolutions.es>',
+      to: data.email,
+      subject: '✅ Solicitud de alta de autónomo recibida',
+      html: clientHtml,
+    });
+    if (error) {
+      console.error('[email] ERROR enviando al cliente:', error);
+    } else {
+      console.log('[email] Email cliente enviado OK. id:', sent?.id);
     }
   } else {
     console.warn('[email] Sin email de cliente — omitiendo envío al solicitante.');
@@ -230,23 +206,17 @@ async function sendEmails(data: AutonomoFormData) {
 
   // ── Email interno ──────────────────────────────────────────────────────────
   console.log('[email] Intentando enviar email interno a: info@ecomsolutions.es');
-  try {
-    const info = await transporter.sendMail({
-      from: '"Formulario Alta Autónomo" <noreply@ecomsolutions.es>',
-      to: 'info@ecomsolutions.es',
-      subject: `Nueva solicitud: ${title}`,
-      html: notifHtml,
-      attachments,
-    });
-    console.log('[email] Email interno enviado OK. messageId:', info.messageId, '| response:', info.response);
-  } catch (err) {
-    const e = err as Error & { code?: string; responseCode?: number; response?: string };
-    console.error('[email] ERROR enviando email interno:', {
-      message: e.message,
-      code: e.code,
-      responseCode: e.responseCode,
-      response: e.response,
-    });
+  const { data: sentInterno, error: errorInterno } = await resend.emails.send({
+    from: 'Formulario Alta Autónomo <noreply@ecomsolutions.es>',
+    to: 'info@ecomsolutions.es',
+    subject: `Nueva solicitud: ${title}`,
+    html: notifHtml,
+    attachments,
+  });
+  if (errorInterno) {
+    console.error('[email] ERROR enviando email interno:', errorInterno);
+  } else {
+    console.log('[email] Email interno enviado OK. id:', sentInterno?.id);
   }
 }
 
