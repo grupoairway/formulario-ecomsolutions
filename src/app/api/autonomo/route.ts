@@ -69,30 +69,104 @@ async function sendEmails(data: AutonomoFormData) {
     </div>
   `;
 
+  const row = (label: string, value: string | null | undefined) =>
+    value
+      ? `<tr>
+          <td style="padding:8px 12px;font-size:0.8rem;font-weight:600;color:#6b7280;white-space:nowrap;width:180px;vertical-align:top;">${label}</td>
+          <td style="padding:8px 12px;font-size:0.8rem;color:#111827;word-break:break-word;">${value}</td>
+        </tr>`
+      : '';
+
+  const section = (title: string, rows: string) =>
+    `<tr>
+      <td colspan="2" style="padding:0;">
+        <div style="background:#f8fafc;border-left:3px solid #1a1a2e;padding:8px 12px;margin-top:16px;margin-bottom:4px;">
+          <span style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#1a1a2e;">${title}</span>
+        </div>
+      </td>
+    </tr>
+    ${rows}`;
+
+  const docs = [
+    data.dniAnverso ? `DNI/NIE anverso: ${data.dniAnverso.name}` : null,
+    data.dniReverso ? `DNI/NIE reverso: ${data.dniReverso.name}` : null,
+    data.permisoTrabajo ? `Permiso de trabajo: ${data.permisoTrabajo.name}` : null,
+  ]
+    .filter(Boolean)
+    .join(' · ') || 'Sin archivos adjuntos';
+
   const notifHtml = `
-    <div style="font-family: Inter, sans-serif; color: #111827;">
-      <h2>Nueva solicitud de alta de autónomo</h2>
-      <p><strong>Nombre:</strong> ${data.nombreCompleto}</p>
-      <p><strong>Email:</strong> ${data.email}</p>
-      <p><strong>Teléfono:</strong> ${data.telefono}</p>
-      <p><strong>DNI/NIE:</strong> ${data.numeroDocumento} (${data.tipoDocumento})</p>
-      <p><strong>Domicilio:</strong> ${domicilioTexto(data)}</p>
-      <p><strong>Actividad:</strong> ${data.descripcionActividad}</p>
-      <p><strong>Epígrafe IAE:</strong> ${data.epigrafeIAE}</p>
-      <p><strong>Fecha inicio:</strong> ${data.cuantoAntes ? 'Cuanto antes' : data.fechaInicio}</p>
-      <p><strong>ROI:</strong> ${data.roi ? 'Sí' : 'No'}</p>
-      <p><strong>Mutua:</strong> ${data.mutua}</p>
-      <p><strong>IBAN:</strong> ${data.iban}</p>
-      <p><strong>Ingresos netos estimados:</strong> ${data.ingresosNetos} €/mes</p>
-      <p><strong>Tarifa reducida:</strong> ${data.noAltaDosAnios && data.sinDeudasSS ? 'Sí' : 'No'}</p>
-      <p><strong>Fecha:</strong> ${new Date().toLocaleDateString('es-ES')}</p>
-      <hr />
-      <pre style="font-size:0.8rem;color:#6b7280;white-space:pre-wrap;">${JSON.stringify(
-        { ...data, dniAnverso: data.dniAnverso ? `[${data.dniAnverso.name}]` : null, dniReverso: data.dniReverso ? `[${data.dniReverso.name}]` : null, permisoTrabajo: data.permisoTrabajo ? `[${data.permisoTrabajo.name}]` : null },
-        null,
-        2
-      )}</pre>
-    </div>
+    <!DOCTYPE html>
+    <html lang="es">
+    <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
+    <body style="margin:0;padding:0;background:#f1f5f9;font-family:Inter,Arial,sans-serif;">
+      <div style="max-width:640px;margin:24px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+
+        <!-- Cabecera -->
+        <div style="background:#1a1a2e;padding:28px 32px;">
+          <div style="display:flex;align-items:center;gap:12px;">
+            <span style="font-size:1.1rem;font-weight:700;color:#ffffff;letter-spacing:-0.02em;">EcomSolutions</span>
+            <span style="color:#4a4a6a;font-size:1.2rem;">|</span>
+            <span style="font-size:0.85rem;color:#a0a0c0;font-weight:500;">Alta de Autónomo</span>
+          </div>
+          <div style="margin-top:16px;">
+            <div style="font-size:1.4rem;font-weight:700;color:#ffffff;line-height:1.2;">${data.nombreCompleto || 'Sin nombre'}</div>
+            <div style="font-size:0.8rem;color:#a0a0c0;margin-top:6px;">Solicitud recibida el ${new Date().toLocaleDateString('es-ES', { day: '2-digit', month: 'long', year: 'numeric' })}</div>
+          </div>
+        </div>
+
+        <!-- Cuerpo -->
+        <div style="background:#ffffff;padding:24px 32px;">
+          <table style="width:100%;border-collapse:collapse;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;">
+            <tbody>
+
+              ${section('Datos personales',
+                row('Nombre completo', data.nombreCompleto) +
+                row('Email', data.email) +
+                row('Teléfono', data.telefono) +
+                row('DNI/NIE', `${data.numeroDocumento} (${tipoDocLabel(data.tipoDocumento)})`) +
+                row('Fecha nacimiento', data.fechaNacimiento) +
+                row('Nacionalidad', data.nacionalidad) +
+                row('Estado civil', data.estadoCivil + (data.fechaEstadoCivil ? ` — ${data.fechaEstadoCivil}` : '')) +
+                row('Domicilio', domicilioTexto(data)) +
+                row('Centro de actividad', data.mismoCentroActividad ? 'Mismo que domicilio' :
+                  [data.centroActividad.direccion, data.centroActividad.cp, data.centroActividad.municipio, data.centroActividad.provincia].filter(Boolean).join(', ') +
+                  (data.centroActividad.m2 ? ` (${data.centroActividad.m2} m²)` : ''))
+              )}
+
+              ${section('Actividad',
+                row('Descripción', data.descripcionActividad) +
+                row('Fecha inicio', data.cuantoAntes ? 'Cuanto antes posible' : data.fechaInicio) +
+                row('ROI intracomunitario', data.roi ? 'Sí' : 'No') +
+                row('Epígrafe IAE', data.epigrafeIAE)
+              )}
+
+              ${section('Seguridad Social',
+                row('Nº afiliación SS', data.numeroAfiliacionSS || 'No indicado') +
+                row('Mutua', data.mutua) +
+                row('IBAN domiciliación', data.iban) +
+                row('Ingresos mensuales netos', data.ingresosNetos ? `${data.ingresosNetos} €/mes` : null) +
+                row('Tarifa reducida (80€)', data.noAltaDosAnios && data.sinDeudasSS ? '✓ Cumple requisitos' : '✗ No cumple')
+              )}
+
+              ${section('Documentación adjunta',
+                row('Archivos', docs)
+              )}
+
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pie -->
+        <div style="background:#f8fafc;padding:16px 32px;border-top:1px solid #e5e7eb;">
+          <p style="margin:0;font-size:0.75rem;color:#9ca3af;">
+            EcomSolutions · formulario.ecomsolutions.es · Solicitud enviada desde /alta-autonomo
+          </p>
+        </div>
+
+      </div>
+    </body>
+    </html>
   `;
 
   const attachments = buildAttachments(data);
