@@ -25,8 +25,15 @@ function buildAttachments(data: AutonomoFormData): MailAttachment[] {
   const attachments: MailAttachment[] = [];
   function addFile(file: FileAttachment | null, label: string) {
     if (!file?.data) return;
+    // Extraer solo la parte base64 después de la coma del data URL
     const base64 = file.data.includes(',') ? file.data.split(',')[1] : file.data;
-    attachments.push({ filename: `${label}_${file.name}`, content: base64, encoding: 'base64', contentType: file.type });
+    if (!base64) return;
+    attachments.push({
+      filename: `${label}_${file.name}`,
+      content: Buffer.from(base64, 'base64'),
+      contentType: file.type || 'application/octet-stream',
+    });
+    console.log(`[/api/autonomo] Adjunto preparado: ${label}_${file.name} (${Math.round(Buffer.from(base64, 'base64').length / 1024)} KB)`);
   }
   addFile(data.dniAnverso, 'DNI_anverso');
   addFile(data.dniReverso, 'DNI_reverso');
@@ -287,6 +294,13 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
 export async function POST(request: NextRequest) {
   try {
     const data: AutonomoFormData = await request.json();
+
+    // Diagnóstico de archivos adjuntos
+    console.log('[/api/autonomo] Adjuntos recibidos:', {
+      dniAnverso:    data.dniAnverso    ? { name: data.dniAnverso.name,    size: data.dniAnverso.size,    type: data.dniAnverso.type,    dataLen: data.dniAnverso.data?.length ?? 0 }    : null,
+      dniReverso:    data.dniReverso    ? { name: data.dniReverso.name,    size: data.dniReverso.size,    type: data.dniReverso.type,    dataLen: data.dniReverso.data?.length ?? 0 }    : null,
+      permisoTrabajo: data.permisoTrabajo ? { name: data.permisoTrabajo.name, size: data.permisoTrabajo.size, type: data.permisoTrabajo.type, dataLen: data.permisoTrabajo.data?.length ?? 0 } : null,
+    });
 
     // Notion y email son independientes: un fallo en Notion no bloquea el envío de emails
     await createNotionPage(data).catch((err: { code?: string; message?: string; body?: string }) => {
