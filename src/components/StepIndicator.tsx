@@ -1,0 +1,39 @@
+'use client';
+
+import styles from './stepIndicator.module.css';
+
+const STEPS = [
+  'Denominación',
+  'Empresa',
+  'Domicilio',
+  'C. actividad',
+  'Socios',
+  'Admins.',
+  'Resumen',
+];
+
+interface Props {
+  current: number;
+}
+
+export default function StepIndicator({ current }: Props) {
+  return (
+    <div className={styles.wrapper}>
+      {STEPS.map((name, i) => {
+        const state =
+          i < current ? 'completed' : i === current ? 'active' : 'pending';
+        return (
+          <div
+            key={i}
+            className={`${styles.stepItem} ${styles[state] ?? ''}`}
+          >
+            <div className={styles.circle}>
+              {state === 'completed' ? '✓' : i + 1}
+            </div>
+            <span className={styles.label}>{name}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}

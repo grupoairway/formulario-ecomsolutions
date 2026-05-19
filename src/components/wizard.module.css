@@ -1,0 +1,191 @@
+/* ── Progreso ── */
+.progressBar {
+  margin-bottom: 8px;
+}
+
+.progressMeta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+
+.progressLabel {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.progressPercent {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-blue);
+}
+
+.progressTrack {
+  height: 6px;
+  background: var(--color-border);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: var(--color-blue);
+  border-radius: 99px;
+  transition: width 0.4s ease;
+}
+
+/* ── Tarjeta ── */
+.card {
+  background: var(--color-white);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow-card);
+  padding: 40px 48px;
+  margin-top: 24px;
+}
+
+.stepTitle {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--color-text);
+  margin-bottom: 6px;
+  letter-spacing: -0.025em;
+}
+
+.stepSubtitle {
+  font-size: 0.9rem;
+  color: var(--color-muted);
+  margin-bottom: 32px;
+  line-height: 1.5;
+}
+
+.stepContent {
+  min-height: 200px;
+}
+
+/* ── Errores globales ── */
+.errorBanner {
+  background: var(--color-error-light);
+  border: 1px solid var(--color-error-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.errorBannerIcon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.errorBannerText {
+  font-size: 0.875rem;
+  color: var(--color-error);
+  font-weight: 500;
+}
+
+/* ── Navegación ── */
+.nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid var(--color-border);
+}
+
+.btnPrev {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  border: 2px solid var(--color-border);
+  border-radius: 10px;
+  background: transparent;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-text);
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.btnPrev:hover {
+  border-color: var(--color-blue);
+  color: var(--color-blue);
+  background: var(--color-blue-light);
+}
+
+.btnNext {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: var(--color-blue);
+  border: 2px solid var(--color-blue);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-white);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btnNext:hover {
+  background: var(--color-blue-dark);
+  border-color: var(--color-blue-dark);
+}
+
+.btnSubmit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  background: var(--color-success);
+  border: 2px solid var(--color-success);
+  border-radius: 10px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--color-white);
+  transition: opacity 0.15s;
+}
+
+.btnSubmit:hover {
+  opacity: 0.9;
+}
+
+.btnSubmit:disabled,
+.btnNext:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.spacer {
+  flex: 1;
+}
+
+/* ── Responsive ── */
+@media (max-width: 640px) {
+  .card {
+    padding: 28px 20px;
+    border-radius: 12px;
+  }
+
+  .stepTitle {
+    font-size: 1.25rem;
+  }
+
+  .nav {
+    gap: 12px;
+  }
+
+  .btnPrev,
+  .btnNext,
+  .btnSubmit {
+    padding: 10px 18px;
+    font-size: 0.85rem;
+  }
+}
