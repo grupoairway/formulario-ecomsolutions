@@ -254,7 +254,7 @@ async function createNotionPage(data: RentaFormData): Promise<void> {
         title: [{ text: { content: getTitle(data) } }],
       },
       'Estado': {
-        select: { name: 'Nuevo' },
+        select: { name: 'Pendiente revisión' },
       },
       'Formulario completado': {
         checkbox: true,
