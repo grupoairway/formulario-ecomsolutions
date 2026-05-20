@@ -68,11 +68,11 @@ export default function RentaStep07Resumen({ formData, onChange, errors }: Props
         <div className={styles.radioInline}>
           {EJERCICIOS_FISCALES.map((ej) => (
             <label
-              key={ej}
-              className={`${styles.radioBtn} ${formData.ejercicioFiscal === ej ? styles.selected : ''}`}
-              onClick={() => onChange({ ejercicioFiscal: ej })}
+              key={ej.value}
+              className={`${styles.radioBtn} ${formData.ejercicioFiscal === ej.value ? styles.selected : ''}`}
+              onClick={() => onChange({ ejercicioFiscal: ej.value })}
             >
-              {ej}
+              {ej.label}
             </label>
           ))}
         </div>

@@ -181,7 +181,10 @@ export const ESTADOS_CIVILES_RENTA = [
   'Viudo/a',
 ];
 
-export const EJERCICIOS_FISCALES = ['2024', '2025'];
+export const EJERCICIOS_FISCALES = [
+  { value: '2024', label: 'Ejercicio 2024 (presentada en 2025)' },
+  { value: '2025', label: 'Ejercicio 2025 (presentada en 2026)' },
+];
 
 export const CLAVE_CERTIFICADO_OPTIONS = [
   { value: 'clave', label: 'Cl@ve PIN / Cl@ve permanente' },
@@ -312,6 +315,6 @@ export const initialRentaFormData: RentaFormData = {
   borradorHacienda: null,
   documentosEntrega: {},
 
-  ejercicioFiscal: '2024',
+  ejercicioFiscal: '2025',
   privacidad: false,
 };

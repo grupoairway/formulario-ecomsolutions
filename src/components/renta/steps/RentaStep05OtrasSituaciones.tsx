@@ -19,10 +19,12 @@ function SiNo({ value, onTrue, onFalse }: { value: boolean | null; onTrue: () =>
 }
 
 export default function RentaStep05OtrasSituaciones({ formData, onChange }: Props) {
+  const ej = formData.ejercicioFiscal || '2025';
+
   return (
     <div>
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>¿Ha residido fuera de España en algún momento de 2024?</label>
+        <label className={styles.label}>¿Ha residido fuera de España en algún momento de {ej}?</label>
         <SiNo
           value={formData.residioFueraEspana}
           onTrue={() => onChange({ residioFueraEspana: true })}
@@ -40,7 +42,7 @@ export default function RentaStep05OtrasSituaciones({ formData, onChange }: Prop
       </div>
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>¿Ha fallecido algún familiar en 2024?</label>
+        <label className={styles.label}>¿Ha fallecido algún familiar en {ej}?</label>
         <SiNo
           value={formData.fallecioFamiliar}
           onTrue={() => onChange({ fallecioFamiliar: true })}
@@ -55,7 +57,7 @@ export default function RentaStep05OtrasSituaciones({ formData, onChange }: Prop
       </div>
 
       <div className={styles.fieldGroup}>
-        <label className={styles.label}>¿Ha recibido algún requerimiento, notificación o carta de la AEAT en 2024?</label>
+        <label className={styles.label}>¿Ha recibido algún requerimiento, notificación o carta de la AEAT en {ej}?</label>
         <SiNo
           value={formData.recibioPRequerimiento}
           onTrue={() => onChange({ recibioPRequerimiento: true })}
