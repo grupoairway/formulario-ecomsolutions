@@ -1,6 +1,6 @@
 'use client';
 
-import { RentaFormData, DomicilioRenta, ESTADOS_CIVILES_RENTA } from '@/lib/types-renta';
+import { RentaFormData, DomicilioRenta, ESTADOS_CIVILES_RENTA, CLAVE_CERTIFICADO_OPTIONS } from '@/lib/types-renta';
 import { PROVINCIAS } from '@/lib/types';
 import styles from '../../steps/steps.module.css';
 
@@ -36,7 +36,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
         )}
       </div>
 
-      {/* NIF/DNI + Fecha de nacimiento */}
+      {/* NIF + Fecha de nacimiento */}
       <div className={styles.fieldRow}>
         <div>
           <label className={styles.label}>
@@ -113,7 +113,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
         )}
       </div>
 
-      {/* Datos del cónyuge si declaración conjunta */}
+      {/* Datos del cónyuge */}
       {declaracionTipo === 'conjunta' && (
         <div className={styles.personaBlock}>
           <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: 16, color: 'var(--color-text)' }}>
@@ -157,7 +157,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
       {/* Domicilio */}
       <div style={{ marginTop: 8, marginBottom: 8 }}>
         <div style={{ fontWeight: 700, fontSize: '0.95rem', color: 'var(--color-text)', marginBottom: 16 }}>
-          Domicilio habitual
+          Domicilio habitual a 31 de diciembre
         </div>
         <div className={styles.fieldRow}>
           <div>
@@ -171,9 +171,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
               value={domicilio.calle}
               onChange={(e) => onChange(dom(formData, 'calle', e.target.value))}
             />
-            {errors.includes('dom_calle') && (
-              <div className={styles.errorMsg}>⚠ Introduce la calle.</div>
-            )}
+            {errors.includes('dom_calle') && <div className={styles.errorMsg}>⚠ Introduce la calle.</div>}
           </div>
           <div>
             <label className={styles.label}>
@@ -186,12 +184,9 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
               value={domicilio.numero}
               onChange={(e) => onChange(dom(formData, 'numero', e.target.value))}
             />
-            {errors.includes('dom_numero') && (
-              <div className={styles.errorMsg}>⚠ Introduce el número.</div>
-            )}
+            {errors.includes('dom_numero') && <div className={styles.errorMsg}>⚠ Introduce el número.</div>}
           </div>
         </div>
-
         <div className={styles.fieldRow}>
           <div>
             <label className={styles.label}>Piso / Puerta (opcional)</label>
@@ -215,12 +210,9 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
               value={domicilio.cp}
               onChange={(e) => onChange(dom(formData, 'cp', e.target.value.replace(/\D/g, '')))}
             />
-            {errors.includes('dom_cp') && (
-              <div className={styles.errorMsg}>⚠ Código postal de 5 dígitos.</div>
-            )}
+            {errors.includes('dom_cp') && <div className={styles.errorMsg}>⚠ Código postal de 5 dígitos.</div>}
           </div>
         </div>
-
         <div className={styles.fieldRow}>
           <div>
             <label className={styles.label}>
@@ -233,9 +225,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
               value={domicilio.municipio}
               onChange={(e) => onChange(dom(formData, 'municipio', e.target.value))}
             />
-            {errors.includes('dom_municipio') && (
-              <div className={styles.errorMsg}>⚠ Introduce el municipio.</div>
-            )}
+            {errors.includes('dom_municipio') && <div className={styles.errorMsg}>⚠ Introduce el municipio.</div>}
           </div>
           <div>
             <label className={styles.label}>
@@ -251,9 +241,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
                 <option key={p} value={p}>{p}</option>
               ))}
             </select>
-            {errors.includes('dom_provincia') && (
-              <div className={styles.errorMsg}>⚠ Selecciona la provincia.</div>
-            )}
+            {errors.includes('dom_provincia') && <div className={styles.errorMsg}>⚠ Selecciona la provincia.</div>}
           </div>
         </div>
       </div>
@@ -271,9 +259,7 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
             value={formData.telefono}
             onChange={(e) => onChange({ telefono: e.target.value })}
           />
-          {errors.includes('telefono') && (
-            <div className={styles.errorMsg}>⚠ Introduce tu teléfono móvil.</div>
-          )}
+          {errors.includes('telefono') && <div className={styles.errorMsg}>⚠ Introduce tu teléfono móvil.</div>}
         </div>
         <div>
           <label className={styles.label}>
@@ -286,10 +272,49 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
             value={formData.email}
             onChange={(e) => onChange({ email: e.target.value })}
           />
-          {errors.includes('email') && (
-            <div className={styles.errorMsg}>⚠ Introduce un email válido.</div>
-          )}
+          {errors.includes('email') && <div className={styles.errorMsg}>⚠ Introduce un email válido.</div>}
         </div>
+      </div>
+
+      {/* IBAN */}
+      <div className={styles.fieldGroup}>
+        <label className={styles.label}>IBAN para devolución o domiciliación del pago</label>
+        <input
+          type="text"
+          className={styles.input}
+          placeholder="ES00 0000 0000 0000 0000 0000"
+          value={formData.iban}
+          onChange={(e) => onChange({ iban: e.target.value.toUpperCase() })}
+        />
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginTop: 6 }}>
+          Necesario para tramitar devoluciones o el pago fraccionado de la cuota.
+        </div>
+      </div>
+
+      {/* Cl@ve / Certificado */}
+      <div className={styles.fieldGroup}>
+        <label className={styles.label}>
+          ¿Dispone de algún sistema de identificación electrónica? <span className={styles.required}>*</span>
+        </label>
+        <div className={styles.radioCards}>
+          {CLAVE_CERTIFICADO_OPTIONS.map((op) => (
+            <label
+              key={op.value}
+              className={`${styles.radioCard} ${formData.claveCertificado === op.value ? styles.selected : ''}`}
+              onClick={() => onChange({ claveCertificado: op.value })}
+            >
+              <div className={styles.radioCircle}>
+                {formData.claveCertificado === op.value && <div className={styles.radioDot} />}
+              </div>
+              <div className={styles.radioCardBody}>
+                <div className={styles.radioCardTitle}>{op.label}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        {errors.includes('claveCertificado') && (
+          <div className={styles.errorMsg}>⚠ Indica qué sistema de identificación tienes.</div>
+        )}
       </div>
 
       {/* Cambio de domicilio */}

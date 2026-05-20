@@ -8,8 +8,9 @@ import RentaStep01DatosPersonales from './steps/RentaStep01DatosPersonales';
 import RentaStep02SituacionFamiliar from './steps/RentaStep02SituacionFamiliar';
 import RentaStep03Ingresos from './steps/RentaStep03Ingresos';
 import RentaStep04Deducciones from './steps/RentaStep04Deducciones';
-import RentaStep05Documentacion from './steps/RentaStep05Documentacion';
-import RentaStep06Resumen from './steps/RentaStep06Resumen';
+import RentaStep05OtrasSituaciones from './steps/RentaStep05OtrasSituaciones';
+import RentaStep06Documentacion from './steps/RentaStep06Documentacion';
+import RentaStep07Resumen from './steps/RentaStep07Resumen';
 import styles from '../wizard.module.css';
 
 const STEP_TITLES = [
@@ -17,11 +18,12 @@ const STEP_TITLES = [
   { title: 'Situación familiar', subtitle: 'Hijos, ascendientes y circunstancias personales.' },
   { title: 'Ingresos y retenciones', subtitle: 'Nóminas, pensiones, alquileres y otros ingresos del ejercicio.' },
   { title: 'Deducciones', subtitle: 'Vivienda, planes de pensiones, donativos y otras reducciones.' },
-  { title: 'Documentación', subtitle: 'Adjunta el DNI, borrador y certificados de retenciones.' },
+  { title: 'Otras situaciones', subtitle: 'Situaciones especiales, residencia en el extranjero y observaciones.' },
+  { title: 'Documentación', subtitle: 'Adjunta el DNI y otros documentos necesarios para la tramitación.' },
   { title: 'Resumen y envío', subtitle: 'Revisa todos los datos y selecciona el ejercicio fiscal antes de enviar.' },
 ];
 
-const TOTAL_STEPS = 6;
+const TOTAL_STEPS = 7;
 
 function validateStep(step: number, data: RentaFormData): string[] {
   const errors: string[] = [];
@@ -44,14 +46,16 @@ function validateStep(step: number, data: RentaFormData): string[] {
     if (!data.telefono.trim()) errors.push('telefono');
     if (!data.email.trim() || !data.email.includes('@')) errors.push('email');
     if (data.cambioDomicilio === null) errors.push('cambioDomicilio');
+    if (!data.claveCertificado) errors.push('claveCertificado');
   }
 
-  if (step === 4) {
+  if (step === 5) {
     if (!data.dniAnverso) errors.push('dniAnverso');
     if (!data.dniReverso) errors.push('dniReverso');
   }
 
-  if (step === 5) {
+  if (step === 6) {
+    if (!data.ejercicioFiscal) errors.push('ejercicioFiscal');
     if (!data.privacidad) errors.push('privacidad');
   }
 
@@ -158,8 +162,9 @@ export default function RentaFormWizard() {
           {currentStep === 1 && <RentaStep02SituacionFamiliar {...stepProps} />}
           {currentStep === 2 && <RentaStep03Ingresos {...stepProps} />}
           {currentStep === 3 && <RentaStep04Deducciones {...stepProps} />}
-          {currentStep === 4 && <RentaStep05Documentacion {...stepProps} />}
-          {currentStep === 5 && <RentaStep06Resumen {...stepProps} />}
+          {currentStep === 4 && <RentaStep05OtrasSituaciones {...stepProps} />}
+          {currentStep === 5 && <RentaStep06Documentacion {...stepProps} />}
+          {currentStep === 6 && <RentaStep07Resumen {...stepProps} />}
         </div>
 
         <div className={styles.nav}>

@@ -2,7 +2,7 @@
 
 import styles from '../stepIndicator.module.css';
 
-const STEPS = ['Datos personales', 'Sit. familiar', 'Ingresos', 'Deducciones', 'Documentación', 'Resumen'];
+const STEPS = ['Datos personales', 'Sit. familiar', 'Ingresos', 'Deducciones', 'Otras sit.', 'Documentación', 'Resumen'];
 
 interface Props {
   current: number;

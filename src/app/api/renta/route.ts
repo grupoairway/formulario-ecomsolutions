@@ -40,9 +40,6 @@ function buildAttachments(data: RentaFormData): ResendAttachment[] {
   addFile(data.dniAnverso, 'DNI_anverso');
   addFile(data.dniReverso, 'DNI_reverso');
   addFile(data.borradorHacienda, 'Borrador_Hacienda');
-  addFile(data.certificadoRetencion1, 'Cert_Retenciones_1');
-  addFile(data.certificadoRetencion2, 'Cert_Retenciones_2');
-  addFile(data.certificadoRetencion3, 'Cert_Retenciones_3');
 
   return attachments;
 }
@@ -70,7 +67,7 @@ async function sendEmails(data: RentaFormData) {
           confirmar los próximos pasos.
         </p>
         <p style="color: #6b7280; line-height: 1.7; margin-bottom: 24px;">
-          Si tienes más documentación (contratos, escrituras, justificantes de donativos, etc.)
+          Si tienes más documentación (certificados de retenciones, contratos, escrituras, justificantes, etc.)
           puedes enviárnosla por email a <strong>info@ecomsolutions.es</strong> o por WhatsApp.
         </p>
         <a href="https://wa.me/34661959962"
@@ -102,23 +99,33 @@ async function sendEmails(data: RentaFormData) {
     </tr>
     ${rows}`;
 
-  const yesNo = (v: boolean | null) => (v === null ? '—' : v ? 'Sí' : 'No');
+  const yn = (v: boolean | null | undefined) => (v === null || v === undefined ? '—' : v ? 'Sí' : 'No');
 
   const hijosTexto = data.hijos.length > 0
-    ? data.hijos.map((h, i) => `Hijo ${i + 1}: ${h.nombre || '—'} (${h.fechaNacimiento || '—'})${h.discapacidad ? ` ${h.porcentajeDiscapacidad}% disc.` : ''}`).join(' | ')
+    ? data.hijos.map((h, i) => `Hijo ${i + 1}: ${h.nombre || '—'} NIF: ${h.nif || '—'} (nac. ${h.fechaNacimiento || '—'})${h.discapacidad ? ` · ${h.porcentajeDiscapacidad}% disc.` : ''} · Convive: ${yn(h.convive)}`).join('<br>')
     : 'No';
 
   const ascTexto = data.ascendientes.length > 0
-    ? data.ascendientes.map((a, i) => `${i + 1}: ${a.nombre || '—'} NIF: ${a.nif || '—'}${a.discapacidad ? ` ${a.gradoDiscapacidad}% disc.` : ''}`).join(' | ')
+    ? data.ascendientes.map((a, i) => `${i + 1}: ${a.nombre || '—'} NIF: ${a.nif || '—'} — ${a.parentesco || '—'}${a.discapacidad ? ` · ${a.gradoDiscapacidad}% disc.` : ''}`).join('<br>')
     : 'No';
+
+  const inmueblesTexto = data.inmuebles.length > 0
+    ? data.inmuebles.map((im, i) =>
+        `Inmueble ${i + 1}: Ref. ${im.referenciaCatastral || '—'} · ${im.porcentajeTitularidad || '—'}% · Uso: ${im.uso || '—'}${im.uso === 'alquilado' ? ` · Ingresos: ${im.ingresosAlquiler} € · Gastos: ${im.gastosAlquiler} €` : ''}`
+      ).join('<br>')
+    : 'No';
+
+  const dedsAutStr = data.deduccionesAutonomicas.length > 0 ? data.deduccionesAutonomicas.join(', ') : 'Ninguna';
+
+  const docsEntregaStr = Object.entries(data.documentosEntrega)
+    .filter(([, v]) => v)
+    .map(([k, v]) => `${k}: ${v === 'adjuntado' ? 'Adjunto en email' : 'Por email/WhatsApp'}`)
+    .join('<br>') || 'Sin documentación adicional indicada';
 
   const docs = [
     data.dniAnverso ? `DNI anverso: ${data.dniAnverso.name}` : null,
     data.dniReverso ? `DNI reverso: ${data.dniReverso.name}` : null,
     data.borradorHacienda ? `Borrador: ${data.borradorHacienda.name}` : null,
-    data.certificadoRetencion1 ? `Cert. ret. 1: ${data.certificadoRetencion1.name}` : null,
-    data.certificadoRetencion2 ? `Cert. ret. 2: ${data.certificadoRetencion2.name}` : null,
-    data.certificadoRetencion3 ? `Cert. ret. 3: ${data.certificadoRetencion3.name}` : null,
   ].filter(Boolean).join(' · ') || 'Sin archivos adjuntos';
 
   const notifHtml = `
@@ -126,7 +133,7 @@ async function sendEmails(data: RentaFormData) {
     <html lang="es">
     <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /></head>
     <body style="margin:0;padding:0;background:#f1f5f9;font-family:Inter,Arial,sans-serif;">
-      <div style="max-width:640px;margin:24px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+      <div style="max-width:680px;margin:24px auto;border-radius:12px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
 
         <div style="background:#1a1a2e;padding:28px 32px;">
           <div style="display:flex;align-items:center;gap:12px;">
@@ -153,7 +160,9 @@ async function sendEmails(data: RentaFormData) {
                 row('Estado civil', data.estadoCivil) +
                 row('Tipo declaración', data.declaracionTipo === 'conjunta' ? `Conjunta — ${data.conyuge.nombre} (${data.conyuge.nif})` : 'Individual') +
                 row('Domicilio', domicilioTexto(data)) +
-                row('Cambio domicilio', yesNo(data.cambioDomicilio)) +
+                row('Cambio domicilio', yn(data.cambioDomicilio)) +
+                row('IBAN', data.iban || null) +
+                row('Identificación electrónica', data.claveCertificado || null) +
                 row('Teléfono', data.telefono) +
                 row('Email', data.email)
               )}
@@ -162,36 +171,64 @@ async function sendEmails(data: RentaFormData) {
                 row('Hijos a cargo', hijosTexto) +
                 row('Ascendientes a cargo', ascTexto) +
                 row('Discapacidad propia', data.tieneDiscapacidad ? `Sí — ${data.porcentajeDiscapacidad}%` : 'No') +
-                row('Pensionista de viudedad', yesNo(data.esPensionistaViudedad))
+                row('Pensionista de viudedad', yn(data.esPensionistaViudedad)) +
+                row('Familia numerosa', data.familiaNumerosa ? `Sí — ${data.categoriaNumerosa}` : 'No') +
+                row('Familia monoparental', yn(data.familiaMonoparental))
               )}
 
-              ${section('Ingresos y retenciones',
+              ${section('Ingresos',
                 row('Nóminas', data.tieneNominas
-                  ? `Sí — ${data.numeroPagadores} pagador(es) · Bruto: ${data.importeBrutoTotal} € · Retenciones: ${data.retencionesTotal} €`
+                  ? `Sí — ${data.numeroPagadores} pagador(es) · Bruto: ${data.importeBrutoTotal} € · Retenc.: ${data.retencionesTotal} €`
                   : 'No') +
-                row('Prestación por desempleo', data.tieneDesempleo ? `Sí — ${data.importeDesempleo} €` : 'No') +
+                row('Retribuciones especie', data.tieneRetribucionesEspecie ? `Sí — ${data.descripcionRetribucionesEspecie}` : 'No') +
+                row('Dietas / gastos viaje', data.tieneDietas ? `Sí — ${data.importeDietas} €` : 'No') +
+                row('Desempleo', data.tieneDesempleo ? `Sí — ${data.importeDesempleo} €` : 'No') +
+                row('Incapacidad temporal', data.tieneIncapacidadTemporal ? `Sí — ${data.importeIncapacidadTemporal} €` : 'No') +
+                row('Maternidad/paternidad', data.tieneMaternidadPaternidad ? `Sí — ${data.importeMaternidadPaternidad} €` : 'No') +
                 row('Pensión', data.tienePension ? `Sí (${data.tipoPension}) — ${data.importePension} €` : 'No') +
-                row('Ingresos autónomo', data.tieneAutonomo
-                  ? `Sí — Régimen: ${data.regimenEstimacion} · Ingresos: ${data.ingresosAutonomo} € · Gastos: ${data.gastosAutonomo} €`
+                row('Autónomo', data.tieneAutonomo
+                  ? `Sí — Régimen: ${data.regimenEstimacion} · Ingresos: ${data.ingresosAutonomo} € · Gastos: ${data.gastosAutonomo} € · SS: ${data.cuotasSSAutonomo} € · Trabajadores: ${yn(data.tieneTrabajadoresAutonomo)} · Vehículo: ${yn(data.usaVehiculoActividad)} · Local: ${yn(data.usaLocalActividad)}`
                   : 'No') +
-                row('Inmuebles alquilados', data.tieneAlquiler
-                  ? `Sí — Ingresos: ${data.ingresosAlquiler} € · Gastos: ${data.gastosAlquiler} €`
-                  : 'No') +
-                row('Ganancias/pérdidas', data.tieneGanancias ? `Sí — ${data.descripcionGanancias}` : 'No') +
+                row('Inmuebles', inmueblesTexto) +
+                row('Cuentas extranjero', yn(data.tieneCuentasExtranjero)) +
+                row('Dividendos extranjero', data.tieneDividendosExtranjero ? `Sí — ${data.importeDividendosExtranjero} €` : 'No') +
+                row('Criptomonedas', data.tieneCripto ? `Sí — ${data.descripcionCripto}` : 'No') +
+                row('Ganancias patrimoniales', data.tieneGanancias ? `Sí — ${data.descripcionGanancias}` : 'No') +
+                row('Pérdidas anteriores', data.tienePerdidasAnteriores ? `Sí — ${data.importePerdidasAnteriores} €` : 'No') +
                 row('Capital mobiliario', data.tieneCapitalMobiliario ? `Sí — ${data.importeCapitalMobiliario} €` : 'No')
               )}
 
               ${section('Deducciones',
-                row('Vivienda habitual antes 2013', yesNo(data.viviendaHabitual2013)) +
+                row('Vivienda habitual pre-2013', yn(data.viviendaHabitual2013)) +
                 row('Plan de pensiones', data.tienePlanPensiones ? `Sí — ${data.importePlanPensiones} €` : 'No') +
+                row('Aport. plan cónyuge', data.tieneAportacionConyuge ? `Sí — ${data.importeAportacionConyuge} €` : 'No') +
+                row('PPA', data.tienePPA ? `Sí — ${data.importePPA} €` : 'No') +
+                row('Seguro dependencia', data.tieneSeguroDependencia ? `Sí — ${data.importeSeguroDependencia} €` : 'No') +
+                row('Pensión compensatoria', data.tienePensionCompensatoria ? `Sí — ${data.importePensionCompensatoria} €` : 'No') +
+                row('Anualidades alimentos', data.tieneAnualidadesAlimentos ? `Sí — ${data.importeAnualidadesAlimentos} €` : 'No') +
                 row('Donativos', data.tieneDonativos ? `Sí — ${data.importeDonativos} €` : 'No') +
-                row('Alquiler (contrato antes 2015)', yesNo(data.alquilerAntes2015)) +
-                row('Devolución cláusula suelo', yesNo(data.clausulaSupelo)) +
-                row('Provincia (ded. autonómicas)', data.domicilio.provincia)
+                row('Alquiler (antes 2015)', yn(data.alquilerAntes2015)) +
+                row('Cláusula suelo', yn(data.clausulaSupelo)) +
+                row('Hijos <3 años', data.tieneHijosMenos3 ? `Sí — cobra abono 140: ${yn(data.cobroAbono140)}` : 'No') +
+                row('Guardería', data.tieneGuarderia ? `Sí — ${data.guarderia.nombreCentro} (NIF: ${data.guarderia.nifCentro}) · ${data.guarderia.importe} €` : 'No') +
+                row('Inversión nueva empresa', data.tieneInversionNuevaEmpresa ? `Sí — ${data.importeInversionNuevaEmpresa} €` : 'No') +
+                row('Rentas extranjero', data.tieneRentasExtranjero ? `Sí — ${data.importeRentasExtranjero} €` : 'No') +
+                row('Deducciones autonómicas', dedsAutStr)
               )}
 
-              ${section('Documentación adjunta',
-                row('Archivos', docs)
+              ${section('Otras situaciones',
+                row('Residió fuera de España', yn(data.residioFueraEspana)) +
+                row('Trabajó fuera de España', yn(data.trabajoFueraEspana)) +
+                row('Fallecimiento familiar', yn(data.fallecioFamiliar)) +
+                row('Requerimiento AEAT', yn(data.recibioPRequerimiento)) +
+                row('Bases negativas anteriores', data.tieneBasesNegativas ? `Sí — ${data.importeBasesNegativas} €` : 'No') +
+                row('Operaciones vinculadas', yn(data.tieneOperacionesVinculadas)) +
+                row('Otras observaciones', data.otrasSituaciones || null)
+              )}
+
+              ${section('Documentación',
+                row('Archivos adjuntos', docs) +
+                row('Documentación adicional', docsEntregaStr)
               )}
 
             </tbody>
@@ -243,7 +280,6 @@ async function sendEmails(data: RentaFormData) {
 }
 
 async function createNotionPage(data: RentaFormData): Promise<void> {
-  // Notion DB ID para declaraciones de renta (configurar NOTION_RENTA_DB en env vars)
   const dbId = process.env.NOTION_RENTA_DB || '366774ba27998089b32cf62511ca2f3b';
   const today = new Date().toISOString().split('T')[0];
 
