@@ -283,44 +283,61 @@ async function createNotionPage(data: RentaFormData): Promise<void> {
   const dbId = process.env.NOTION_RENTA_DB || '366774ba27998089b32cf62511ca2f3b';
   const today = new Date().toISOString().split('T')[0];
 
-  await notion.pages.create({
+  const tipoDeclaracion = data.declaracionTipo === 'conjunta' ? 'Conjunta' : 'Individual';
+
+  const properties = {
+    'Nombre': {
+      title: [{ text: { content: getTitle(data) } }],
+    },
+    'Estado': {
+      select: { name: 'Pendiente revisión' },
+    },
+    'Formulario completado': {
+      checkbox: true,
+    },
+    'Fecha formulario': {
+      date: { start: today },
+    },
+    'NIF': {
+      rich_text: richText(data.nif),
+    },
+    'Ejercicio fiscal': {
+      rich_text: richText(data.ejercicioFiscal),
+    },
+    'Tipo declaración': {
+      select: { name: tipoDeclaracion },
+    },
+    'Provincia': {
+      rich_text: richText(data.domicilio.provincia),
+    },
+    'Domicilio': {
+      rich_text: richText(domicilioTexto(data)),
+    },
+    ...(data.email ? { 'Email solicitante': { email: data.email } } : {}),
+    ...(data.telefono ? { 'Teléfono': { phone_number: data.telefono } } : {}),
+  };
+
+  console.log('[notion] DB ID:', dbId);
+  console.log('[notion] NOTION_TOKEN set:', !!process.env.NOTION_TOKEN, '| len:', process.env.NOTION_TOKEN?.length ?? 0);
+  console.log('[notion] Propiedades a enviar:', JSON.stringify({
+    Nombre: getTitle(data),
+    Estado: 'Pendiente revisión',
+    'Formulario completado': true,
+    'Fecha formulario': today,
+    NIF: data.nif,
+    'Ejercicio fiscal': data.ejercicioFiscal,
+    'Tipo declaración': tipoDeclaracion,
+    Provincia: data.domicilio.provincia,
+    'Email solicitante': data.email || '(omitido)',
+    Teléfono: data.telefono || '(omitido)',
+  }));
+
+  const response = await notion.pages.create({
     parent: { database_id: dbId },
-    properties: {
-      'Nombre': {
-        title: [{ text: { content: getTitle(data) } }],
-      },
-      'Estado': {
-        select: { name: 'Pendiente revisión' },
-      },
-      'Formulario completado': {
-        checkbox: true,
-      },
-      'Fecha formulario': {
-        date: { start: today },
-      },
-      'Email solicitante': {
-        email: data.email || null,
-      },
-      'NIF': {
-        rich_text: richText(data.nif),
-      },
-      'Teléfono': {
-        phone_number: data.telefono || null,
-      },
-      'Ejercicio fiscal': {
-        rich_text: richText(data.ejercicioFiscal),
-      },
-      'Tipo declaración': {
-        select: data.declaracionTipo ? { name: data.declaracionTipo === 'conjunta' ? 'Conjunta' : 'Individual' } : null,
-      },
-      'Provincia': {
-        rich_text: richText(data.domicilio.provincia),
-      },
-      'Domicilio': {
-        rich_text: richText(domicilioTexto(data)),
-      },
-    } as Parameters<typeof notion.pages.create>[0]['properties'],
+    properties: properties as Parameters<typeof notion.pages.create>[0]['properties'],
   });
+
+  console.log('[notion] Página creada OK. ID:', (response as { id?: string }).id ?? '—');
 }
 
 export async function POST(request: NextRequest) {
@@ -334,8 +351,12 @@ export async function POST(request: NextRequest) {
       borrador: data.borradorHacienda ? { name: data.borradorHacienda.name } : null,
     });
 
-    await createNotionPage(data).catch((err: { code?: string; message?: string; body?: string }) => {
-      console.error('[/api/renta] Notion FAILED —', { code: err?.code, message: err?.message, body: err?.body });
+    await createNotionPage(data).catch((err: unknown) => {
+      console.error('[notion] FAILED — error completo:', JSON.stringify(err, null, 2));
+      if (err instanceof Error) {
+        console.error('[notion] message:', err.message);
+        console.error('[notion] stack:', err.stack);
+      }
     });
 
     await sendEmails(data).catch((err: { message?: string }) => {
