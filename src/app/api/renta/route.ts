@@ -302,7 +302,7 @@ async function createNotionPage(data: RentaFormData): Promise<void> {
       rich_text: richText(data.nif),
     },
     'Ejercicio fiscal': {
-      rich_text: richText(data.ejercicioFiscal),
+      select: { name: data.ejercicioFiscal || '2025' },
     },
     'Tipo declaración': {
       select: { name: tipoDeclaracion },
@@ -325,7 +325,7 @@ async function createNotionPage(data: RentaFormData): Promise<void> {
     'Formulario completado': true,
     'Fecha formulario': today,
     NIF: data.nif,
-    'Ejercicio fiscal': data.ejercicioFiscal,
+    'Ejercicio fiscal (select)': data.ejercicioFiscal || '2025',
     'Tipo declaración': tipoDeclaracion,
     Provincia: data.domicilio.provincia,
     'Email solicitante': data.email || '(omitido)',
