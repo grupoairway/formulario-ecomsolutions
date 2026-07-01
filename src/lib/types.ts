@@ -6,12 +6,25 @@ export type TipoAportacion =
   | 'dineraria_no_acreditada';
 export type TipoRetribucion = 'fija' | 'porcentual';
 export type TipoAdministracion = 'solidarios' | 'mancomunados';
+export type Sexo = 'hombre' | 'mujer' | '';
+export type DuracionSociedad = 'indefinida' | 'determinada';
 
-export interface DomicilioFields {
-  provincia: string;
-  municipio: string;
+// Dirección desglosada (reutilizable: domicilio social, centro de actividad, socios)
+export interface DireccionDetallada {
+  tipoVia: string;
+  nombreVia: string;
+  numero: string;
+  bloque: string;
+  piso: string;
+  puerta: string;
   codigoPostal: string;
-  direccion: string;
+  municipio: string;
+  provincia: string;
+}
+
+// Local con dirección + datos de superficie (domicilio social / centro de actividad)
+export interface DomicilioFields {
+  direccion: DireccionDetallada;
   superficie: string;
   porcentajeActividad: string;
 }
@@ -22,15 +35,22 @@ export interface Socio {
   nombre: string;
   primerApellido: string;
   segundoApellido: string;
+  sexo: Sexo; // solo persona física
   documento: string;
   email: string;
-  fechaNacimientoConstitucion: string;
+  fechaNacimientoConstitucion: string; // nacimiento (física) o constitución (jurídica)
+  fechaInscripcion: string; // solo persona jurídica: inscripción registral
   nacionalidad: string;
   estadoCivil: string;
+  // Representante (solo cuando el socio es persona jurídica)
+  representanteNombre: string;
+  representanteApellidos: string;
+  representanteDocumento: string;
   mismoDomicilio: boolean;
-  direccionAlternativa: string;
+  direccion: DireccionDetallada; // domicilio propio del socio (si no coincide con el social)
   tipoAportacion: TipoAportacion | '';
-  aportacion: string;
+  importeAportacion: string; // importe/valoración en € (para todas las aportaciones)
+  descripcionBienes: string; // solo aportación no dineraria: descripción de bienes
 }
 
 export interface Administrador {
@@ -53,33 +73,60 @@ export interface Administrador {
 }
 
 export interface FormData {
-  // Step 1
+  // Step 1 — Denominación
   metodoDenominacion: MetodoDenominacion | '';
   denominaciones: [string, string, string, string, string];
   nombreBolsa: string;
   denominacionCertificada: string;
 
-  // Step 2
-  actividad: string;
+  // Step 2 — Empresa / actividad
+  actividadPrincipal: string;
+  actividadesSecundarias: string[];
   roi: boolean | null;
   fechaInicioActividad: string;
+  cierreEjercicio: string; // default '31/12'
+  duracionSociedad: DuracionSociedad; // default 'indefinida'
+  duracionAnios: string; // solo si duracionSociedad === 'determinada'
 
-  // Step 3
+  // Step 3 — Domicilio social
   domicilio: DomicilioFields;
 
-  // Step 4
+  // Step 4 — Centro de actividad
   mismoCentroActividad: boolean | null;
   centroActividad: DomicilioFields;
 
-  // Step 5
+  // Step 5 — Socios
   socios: Socio[];
+  capitalSocial: string; // campo propio (validado contra la suma de aportaciones)
 
-  // Step 6
+  // Step 6 — Administradores
   tipoAdministracion: TipoAdministracion | '';
   administradores: Administrador[];
 
-  // Step 7
+  // Step 7 — Confirmación
   confirmacion: boolean;
+}
+
+export function createEmptyDireccion(): DireccionDetallada {
+  return {
+    tipoVia: 'Calle',
+    nombreVia: '',
+    numero: '',
+    bloque: '',
+    piso: '',
+    puerta: '',
+    codigoPostal: '',
+    municipio: '',
+    provincia: '',
+  };
+}
+
+export function createEmptyDomicilio(): DomicilioFields {
+  return {
+    direccion: createEmptyDireccion(),
+    superficie: '',
+    porcentajeActividad: '',
+  };
 }
 
 export function createEmptySocio(): Socio {
@@ -89,15 +136,21 @@ export function createEmptySocio(): Socio {
     nombre: '',
     primerApellido: '',
     segundoApellido: '',
+    sexo: '',
     documento: '',
     email: '',
     fechaNacimientoConstitucion: '',
+    fechaInscripcion: '',
     nacionalidad: 'Española',
     estadoCivil: '',
+    representanteNombre: '',
+    representanteApellidos: '',
+    representanteDocumento: '',
     mismoDomicilio: true,
-    direccionAlternativa: '',
+    direccion: createEmptyDireccion(),
     tipoAportacion: '',
-    aportacion: '',
+    importeAportacion: '',
+    descripcionBienes: '',
   };
 }
 
@@ -121,6 +174,28 @@ export function createEmptyAdministrador(): Administrador {
     tarifaReducida: null,
   };
 }
+
+export const TIPOS_VIA = [
+  'Calle',
+  'Avenida',
+  'Plaza',
+  'Paseo',
+  'Camino',
+  'Carretera',
+  'Ronda',
+  'Travesía',
+  'Vía',
+  'Rambla',
+  'Callejón',
+  'Polígono',
+  'Urbanización',
+  'Otro',
+];
+
+export const SEXOS: { value: Sexo; label: string }[] = [
+  { value: 'hombre', label: 'Hombre' },
+  { value: 'mujer', label: 'Mujer' },
+];
 
 export const PROVINCIAS = [
   'Álava', 'Albacete', 'Alicante', 'Almería', 'Asturias', 'Ávila',
@@ -169,27 +244,18 @@ export const initialFormData: FormData = {
   denominaciones: ['', '', '', '', ''],
   nombreBolsa: '',
   denominacionCertificada: '',
-  actividad: '',
+  actividadPrincipal: '',
+  actividadesSecundarias: [],
   roi: null,
   fechaInicioActividad: '',
-  domicilio: {
-    provincia: '',
-    municipio: '',
-    codigoPostal: '',
-    direccion: '',
-    superficie: '',
-    porcentajeActividad: '',
-  },
+  cierreEjercicio: '31/12',
+  duracionSociedad: 'indefinida',
+  duracionAnios: '',
+  domicilio: createEmptyDomicilio(),
   mismoCentroActividad: null,
-  centroActividad: {
-    provincia: '',
-    municipio: '',
-    codigoPostal: '',
-    direccion: '',
-    superficie: '',
-    porcentajeActividad: '',
-  },
+  centroActividad: createEmptyDomicilio(),
   socios: [],
+  capitalSocial: '',
   tipoAdministracion: '',
   administradores: [],
   confirmacion: false,

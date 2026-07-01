@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { FormData } from '@/lib/types';
+import { FormData, DireccionDetallada } from '@/lib/types';
 import styles from './steps.module.css';
 
 interface Props {
@@ -37,21 +37,26 @@ function Row({ label, value }: { label: string; value: string | undefined | null
   );
 }
 
-function getNombreSociedad(formData: FormData): string {
-  if (formData.metodoDenominacion === 'nuevo') return formData.denominaciones[0] || '—';
-  if (formData.metodoDenominacion === 'bolsa') return formData.nombreBolsa || '—';
-  return formData.denominacionCertificada || '—';
+function parseNum(s: string): number {
+  const n = parseFloat((s || '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
 }
 
-function capitalDinerario(formData: FormData): string {
-  let total = 0;
-  for (const s of formData.socios) {
-    if (s.tipoAportacion === 'dineraria_acreditada' || s.tipoAportacion === 'dineraria_no_acreditada') {
-      const v = parseFloat(s.aportacion.replace(',', '.'));
-      if (!isNaN(v)) total += v;
-    }
-  }
-  return total.toLocaleString('es-ES', { minimumFractionDigits: 2 }) + '€';
+function euros(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
+}
+
+function fmtDir(d: DireccionDetallada): string {
+  const via = [d.tipoVia, d.nombreVia, d.numero].filter(Boolean).join(' ');
+  const detalle = [
+    d.bloque ? `Bloque ${d.bloque}` : '',
+    d.piso ? `Piso ${d.piso}` : '',
+    d.puerta ? `Puerta ${d.puerta}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const cpMun = [d.codigoPostal, d.municipio].filter(Boolean).join(' ');
+  return [via, detalle, cpMun, d.provincia].filter(Boolean).join(', ');
 }
 
 const METODO_LABEL: Record<string, string> = {
@@ -67,6 +72,15 @@ const APORTACION_LABEL: Record<string, string> = {
 };
 
 export default function Step07Resumen({ formData, onChange, errors }: Props) {
+  const capital = parseNum(formData.capitalSocial);
+  const totalAport = formData.socios.reduce((sum, s) => sum + parseNum(s.importeAportacion), 0);
+  const cuadra = capital > 0 && Math.abs(totalAport - capital) < 0.005;
+
+  const duracion = formData.duracionSociedad === 'determinada'
+    ? `Determinada${formData.duracionAnios ? ` (${formData.duracionAnios} años)` : ''}`
+    : 'Indefinida';
+  const secundarias = formData.actividadesSecundarias.filter(Boolean);
+
   return (
     <div>
       <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', marginBottom: 24, lineHeight: 1.6 }}>
@@ -91,8 +105,13 @@ export default function Step07Resumen({ formData, onChange, errors }: Props) {
 
       {/* Empresa */}
       <Section title="2. Información de la empresa">
-        <Row label="Actividad" value={formData.actividad} />
+        <Row label="Actividad principal" value={formData.actividadPrincipal} />
+        {secundarias.length > 0 && (
+          <Row label="Actividades secundarias" value={secundarias.join(', ')} />
+        )}
         <Row label="ROI intracomunitario" value={formData.roi} />
+        <Row label="Cierre de ejercicio" value={formData.cierreEjercicio} />
+        <Row label="Duración" value={duracion} />
         {formData.fechaInicioActividad && (
           <Row label="Inicio de actividad" value={formData.fechaInicioActividad} />
         )}
@@ -100,10 +119,7 @@ export default function Step07Resumen({ formData, onChange, errors }: Props) {
 
       {/* Domicilio */}
       <Section title="3. Domicilio social">
-        <Row label="Dirección" value={formData.domicilio.direccion} />
-        <Row label="Municipio" value={formData.domicilio.municipio} />
-        <Row label="Código postal" value={formData.domicilio.codigoPostal} />
-        <Row label="Provincia" value={formData.domicilio.provincia} />
+        <Row label="Dirección" value={fmtDir(formData.domicilio.direccion)} />
         <Row label="Superficie" value={formData.domicilio.superficie ? `${formData.domicilio.superficie} m²` : ''} />
         <Row label="% actividad" value={formData.domicilio.porcentajeActividad ? `${formData.domicilio.porcentajeActividad}%` : ''} />
       </Section>
@@ -116,43 +132,66 @@ export default function Step07Resumen({ formData, onChange, errors }: Props) {
         />
         {formData.mismoCentroActividad === false && (
           <>
-            <Row label="Dirección" value={formData.centroActividad.direccion} />
-            <Row label="Municipio" value={formData.centroActividad.municipio} />
-            <Row label="Código postal" value={formData.centroActividad.codigoPostal} />
-            <Row label="Provincia" value={formData.centroActividad.provincia} />
+            <Row label="Dirección" value={fmtDir(formData.centroActividad.direccion)} />
+            <Row label="Superficie" value={formData.centroActividad.superficie ? `${formData.centroActividad.superficie} m²` : ''} />
+            <Row label="% actividad" value={formData.centroActividad.porcentajeActividad ? `${formData.centroActividad.porcentajeActividad}%` : ''} />
           </>
         )}
       </Section>
 
       {/* Socios */}
       <Section title="5. Socios">
-        {formData.socios.map((s, i) => (
-          <div key={s.id} style={{ marginBottom: i < formData.socios.length - 1 ? 16 : 0 }}>
-            <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: 6, color: 'var(--color-text)' }}>
-              Socio {i + 1}
+        {formData.socios.map((s, i) => {
+          const esFisica = s.tipo !== 'sociedad';
+          return (
+            <div key={s.id} style={{ marginBottom: i < formData.socios.length - 1 ? 16 : 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: 6, color: 'var(--color-text)' }}>
+                Socio {i + 1} · {esFisica ? 'Persona física' : 'Persona jurídica'}
+              </div>
+              <Row
+                label={esFisica ? 'Nombre' : 'Denominación'}
+                value={
+                  esFisica
+                    ? [s.nombre, s.primerApellido, s.segundoApellido].filter(Boolean).join(' ')
+                    : s.nombre
+                }
+              />
+              <Row label={esFisica ? 'DNI/NIF/NIE' : 'CIF'} value={s.documento} />
+              {esFisica && <Row label="Sexo" value={s.sexo === 'hombre' ? 'Hombre' : s.sexo === 'mujer' ? 'Mujer' : ''} />}
+              <Row label="Nacionalidad" value={s.nacionalidad} />
+              <Row label={esFisica ? 'Fecha nacimiento' : 'Fecha constitución'} value={s.fechaNacimientoConstitucion} />
+              {esFisica && <Row label="Estado civil" value={s.estadoCivil} />}
+              {!esFisica && <Row label="Fecha inscripción" value={s.fechaInscripcion} />}
+              {!esFisica && (
+                <Row
+                  label="Representante"
+                  value={[s.representanteNombre, s.representanteApellidos].filter(Boolean).join(' ')}
+                />
+              )}
+              {!esFisica && <Row label="Doc. representante" value={s.representanteDocumento} />}
+              {esFisica && <Row label="Email" value={s.email} />}
+              <Row label="Domicilio" value={s.mismoDomicilio ? 'Mismo que el social' : fmtDir(s.direccion)} />
+              <Row label="Aportación" value={APORTACION_LABEL[s.tipoAportacion] ?? ''} />
+              <Row
+                label="Importe / valoración"
+                value={s.importeAportacion ? euros(parseNum(s.importeAportacion)) : ''}
+              />
+              {s.tipoAportacion === 'no_dineraria' && (
+                <Row label="Bienes aportados" value={s.descripcionBienes} />
+              )}
             </div>
-            <Row
-              label="Nombre"
-              value={[s.nombre, s.primerApellido, s.segundoApellido].filter(Boolean).join(' ')}
-            />
-            <Row label="Email" value={s.email} />
-            <Row label="Documento" value={s.documento} />
-            <Row label="Nacionalidad" value={s.nacionalidad} />
-            <Row label="Estado civil" value={s.estadoCivil} />
-            <Row label="Aportación" value={APORTACION_LABEL[s.tipoAportacion] ?? ''} />
-            <Row
-              label="Importe / bienes"
-              value={
-                s.tipoAportacion !== 'no_dineraria' && s.aportacion
-                  ? `${parseFloat(s.aportacion || '0').toLocaleString('es-ES')}€`
-                  : s.aportacion
-              }
-            />
-          </div>
-        ))}
+          );
+        })}
         <div style={{ marginTop: 12, padding: '10px 0', borderTop: '1px solid var(--color-border)' }}>
-          <Row label="Capital social total" value={capitalDinerario(formData)} />
+          <Row label="Capital social" value={capital > 0 ? euros(capital) : ''} />
+          <Row label="Total aportado" value={euros(totalAport)} />
         </div>
+        {capital > 0 && !cuadra && (
+          <div className={styles.errorMsg} style={{ marginTop: 8 }}>
+            ⚠ El total aportado ({euros(totalAport)}) no coincide con el capital social ({euros(capital)}).
+            Puedes enviarlo igualmente; lo revisaremos.
+          </div>
+        )}
       </Section>
 
       {/* Administradores */}
@@ -161,13 +200,19 @@ export default function Step07Resumen({ formData, onChange, errors }: Props) {
         {formData.administradores.map((a, i) => (
           <div key={a.id} style={{ marginTop: 12 }}>
             <div style={{ fontWeight: 700, fontSize: '0.875rem', marginBottom: 6, color: 'var(--color-text)' }}>
-              Administrador {i + 1}
+              Administrador {i + 1} · {a.tipo === 'sociedad' ? 'Persona jurídica' : 'Persona física'}
             </div>
             <Row
               label="Nombre"
               value={[a.nombre, a.apellidos].filter(Boolean).join(' ')}
             />
             <Row label="Documento" value={a.documento} />
+            {a.tipo === 'sociedad' && (
+              <Row
+                label="Representante"
+                value={[a.representanteNombre, a.representanteApellidos].filter(Boolean).join(' ')}
+              />
+            )}
             <Row label="Retribución" value={a.cobranRetribucion} />
             {a.cobranRetribucion && a.tipoRetribucion && (
               <Row

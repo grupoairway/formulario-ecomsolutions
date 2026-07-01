@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
 import nodemailer from 'nodemailer';
-import { FormData } from '@/lib/types';
+import { FormData, DireccionDetallada } from '@/lib/types';
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
@@ -22,6 +22,11 @@ const TIPO_ADMIN_LABEL: Record<string, string> = {
   mancomunados: 'Mancomunados',
 };
 
+const DURACION_LABEL: Record<string, string> = {
+  indefinida: 'Indefinida',
+  determinada: 'Determinada',
+};
+
 // Reparte las denominaciones del formulario en los 5 campos de Notion según el método
 function denominacionesPorCampo(formData: FormData): string[] {
   const campos = ['', '', '', '', ''];
@@ -37,14 +42,21 @@ function denominacionesPorCampo(formData: FormData): string[] {
   return campos;
 }
 
-// --- Resumen legible para el cuerpo de la página (para copiar al DUE) ---
-function labelTipoPersona(t: string): string {
-  if (t === 'sr') return 'Sr.';
-  if (t === 'sra') return 'Sra.';
-  if (t === 'sociedad') return 'Sociedad';
-  return t || '—';
+// Ensambla una dirección desglosada en una línea legible
+function formatDireccion(d: DireccionDetallada): string {
+  const via = [d.tipoVia, d.nombreVia, d.numero].filter(Boolean).join(' ');
+  const detalle = [
+    d.bloque ? `Bloque ${d.bloque}` : '',
+    d.piso ? `Piso ${d.piso}` : '',
+    d.puerta ? `Puerta ${d.puerta}` : '',
+  ]
+    .filter(Boolean)
+    .join(', ');
+  const cpMun = [d.codigoPostal, d.municipio].filter(Boolean).join(' ');
+  return [via, detalle, cpMun, d.provincia].filter(Boolean).join(', ') || '—';
 }
 
+// --- Resumen legible para el cuerpo de la página (para copiar al DUE) ---
 const APORTACION_LABEL: Record<string, string> = {
   dineraria_acreditada: 'Dineraria (acreditada)',
   dineraria_no_acreditada: 'Dineraria (no acreditada)',
@@ -78,70 +90,89 @@ function parseAmount(a: string): number {
   return isNaN(n) ? 0 : n;
 }
 
+function euros(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+}
+
+// Resumen en el ORDEN DEL DUE: Empresa → Domicilios → Socios → Administración → Representantes → Centro
 function buildResumenBlocks(formData: FormData): NotionBlock[] {
   const blocks: NotionBlock[] = [];
+  const yn = (v: boolean | null) => (v === true ? 'Sí' : v === false ? 'No' : '—');
 
-  // Denominación
+  // 1) EMPRESA
+  blocks.push(heading('EMPRESA'));
   const denoms = denominacionesPorCampo(formData).filter(Boolean);
-  blocks.push(heading('DENOMINACIÓN'));
-  blocks.push(...paragraphs(denoms.length ? denoms.map((d, i) => `${i + 1}. ${d}`).join('\n') : '—'));
-
-  // Tipo de sociedad (inferido por nº de socios)
   const tipoSociedad = formData.socios.length === 1
     ? 'SLU (Sociedad Limitada Unipersonal)'
     : 'SL (Sociedad Limitada)';
-  blocks.push(heading('TIPO DE SOCIEDAD'));
-  blocks.push(...paragraphs(tipoSociedad));
+  const duracion = formData.duracionSociedad === 'determinada'
+    ? `Determinada${formData.duracionAnios ? ` (${formData.duracionAnios} años)` : ''}`
+    : 'Indefinida';
+  blocks.push(...paragraphs([
+    `Denominación(es): ${denoms.length ? denoms.join(' | ') : '—'}`,
+    `Tipo de sociedad: ${tipoSociedad}`,
+    `Capital social: ${formData.capitalSocial ? euros(parseAmount(formData.capitalSocial)) : '—'}`,
+    `Cierre de ejercicio: ${formData.cierreEjercicio || '—'}`,
+    `Duración: ${duracion}`,
+  ].join('\n')));
 
-  // Capital social
-  blocks.push(heading('CAPITAL SOCIAL'));
-  blocks.push(...paragraphs(`${capitalTotal(formData).toLocaleString('es-ES')} €`));
-
-  // Domicilio social
+  // 2) DOMICILIOS
+  blocks.push(heading('DOMICILIOS'));
   const dom = formData.domicilio;
-  blocks.push(heading('DOMICILIO SOCIAL'));
   blocks.push(...paragraphs([
-    `Dirección: ${dom.direccion || '—'}`,
-    `Municipio: ${dom.municipio || '—'}`,
-    `Código postal: ${dom.codigoPostal || '—'}`,
-    `Provincia: ${dom.provincia || '—'}`,
-    `Superficie: ${dom.superficie || '—'} m²`,
-    `% afecto a la actividad: ${dom.porcentajeActividad || '—'}%`,
+    `Domicilio social: ${formatDireccion(dom.direccion)}`,
+    `Superficie: ${dom.superficie || '—'} m²  ·  % afecto a la actividad: ${dom.porcentajeActividad || '—'}%`,
+    `Domicilio fiscal / notificaciones: (mismo que el social)`,
   ].join('\n')));
 
-  // Actividad / CNAE
-  blocks.push(heading('ACTIVIDAD / CNAE'));
-  blocks.push(...paragraphs([
-    `Actividad / CNAE: ${formData.actividad || '—'}`,
-    `ROI intracomunitario: ${formData.roi === true ? 'Sí' : formData.roi === false ? 'No' : '—'}`,
-    `Fecha inicio actividad: ${formData.fechaInicioActividad || '—'}`,
-  ].join('\n')));
-
-  // Socios
+  // 3) SOCIOS (persona física / persona jurídica)
   blocks.push(heading('SOCIOS'));
-  const totalAport = formData.socios.reduce((s, x) => s + parseAmount(x.aportacion), 0);
-  if (formData.socios.length === 0) {
+  const totalAport = formData.socios.reduce((s, x) => s + parseAmount(x.importeAportacion), 0);
+  if (!formData.socios.length) {
     blocks.push(...paragraphs('—'));
   } else {
     formData.socios.forEach((s, i) => {
-      const nombre = [s.nombre, s.primerApellido, s.segundoApellido].filter(Boolean).join(' ') || '—';
-      const pct = totalAport > 0 ? ((parseAmount(s.aportacion) / totalAport) * 100).toFixed(2) : '0.00';
-      blocks.push(...paragraphs(
-        `${i + 1}. ${labelTipoPersona(s.tipo)} ${nombre}\n` +
-        `   NIF/DNI: ${s.documento || '—'}\n` +
-        `   Participación: ${pct}%  ·  Aportación: ${APORTACION_LABEL[s.tipoAportacion] || '—'}` +
-        `${s.aportacion ? ` (${s.aportacion} €)` : ''}\n` +
-        `   Nacionalidad: ${s.nacionalidad || '—'}` +
-        `${s.estadoCivil ? `  ·  Estado civil: ${s.estadoCivil}` : ''}` +
-        `${s.email ? `  ·  Email: ${s.email}` : ''}`
-      ));
+      const pct = totalAport > 0 ? ((parseAmount(s.importeAportacion) / totalAport) * 100).toFixed(2) : '0.00';
+      const aport = `${APORTACION_LABEL[s.tipoAportacion] || '—'}${s.importeAportacion ? ` — ${euros(parseAmount(s.importeAportacion))}` : ''}`;
+      const domSocio = s.mismoDomicilio ? '(mismo que el social)' : formatDireccion(s.direccion);
+      let linea: string;
+      if (s.tipo === 'sociedad') {
+        linea =
+          `${i + 1}. [Persona jurídica] ${s.nombre || '—'}\n` +
+          `   NIF/CIF: ${s.documento || '—'}\n` +
+          `   Fecha constitución: ${s.fechaNacimientoConstitucion || '—'}  ·  Fecha inscripción: ${s.fechaInscripcion || '—'}\n` +
+          `   Nacionalidad: ${s.nacionalidad || '—'}\n` +
+          `   Domicilio: ${domSocio}\n` +
+          `   Participación: ${pct}%  ·  Aportación: ${aport}`;
+      } else {
+        const nombre = [s.nombre, s.primerApellido, s.segundoApellido].filter(Boolean).join(' ') || '—';
+        const sexo = s.sexo === 'hombre' ? 'Hombre' : s.sexo === 'mujer' ? 'Mujer' : '—';
+        linea =
+          `${i + 1}. [Persona física] ${nombre}\n` +
+          `   DNI/NIF/NIE: ${s.documento || '—'}  ·  Sexo: ${sexo}  ·  Nacionalidad: ${s.nacionalidad || '—'}\n` +
+          `   Fecha de nacimiento: ${s.fechaNacimientoConstitucion || '—'}  ·  Estado civil: ${s.estadoCivil || '—'}\n` +
+          `   Domicilio: ${domSocio}\n` +
+          `   Participación: ${pct}%  ·  Aportación: ${aport}` +
+          `${s.email ? `\n   Email: ${s.email}` : ''}`;
+      }
+      if (s.tipoAportacion === 'no_dineraria' && s.descripcionBienes) {
+        linea += `\n   Bienes aportados: ${s.descripcionBienes}`;
+      }
+      blocks.push(...paragraphs(linea));
     });
+
+    const capital = parseAmount(formData.capitalSocial);
+    const cuadra = capital > 0 && Math.abs(totalAport - capital) < 0.005;
+    blocks.push(...paragraphs(
+      `Total aportado: ${euros(totalAport)}  ·  Capital social declarado: ${euros(capital)}  ·  ` +
+      `${cuadra ? 'CUADRA ✓' : 'NO CUADRA ⚠ (revisar)'}`
+    ));
   }
 
-  // Administradores
-  blocks.push(heading('ADMINISTRADORES'));
+  // 4) ÓRGANO DE ADMINISTRACIÓN
+  blocks.push(heading('ÓRGANO DE ADMINISTRACIÓN'));
   blocks.push(...paragraphs(`Tipo de administración: ${TIPO_ADMIN_LABEL[formData.tipoAdministracion] || '—'}`));
-  if (formData.administradores.length === 0) {
+  if (!formData.administradores.length) {
     blocks.push(...paragraphs('—'));
   } else {
     formData.administradores.forEach((a, i) => {
@@ -152,19 +183,52 @@ function buildResumenBlocks(formData: FormData): NotionBlock[] {
             : a.tipoRetribucion === 'fija' ? 'Sí (fija)' : 'Sí')
         : a.cobranRetribucion === false ? 'No' : '—';
       let linea =
-        `${i + 1}. ${a.tipo === 'sociedad' ? 'Sociedad' : 'Persona física'} ${nombre}\n` +
+        `${i + 1}. ${a.tipo === 'sociedad' ? '[Persona jurídica]' : '[Persona física]'} ${nombre}\n` +
         `   NIF/DNI: ${a.documento || '—'}\n` +
-        `   Retribución: ${retrib}  ·  Autónomo societario: ` +
-        `${a.esAutonomoSocietario === true ? 'Sí' : a.esAutonomoSocietario === false ? 'No' : '—'}`;
-      if (a.tipo === 'sociedad' && (a.representanteNombre || a.representanteApellidos)) {
-        linea += `\n   Representante: ${[a.representanteNombre, a.representanteApellidos].filter(Boolean).join(' ')} (${a.representanteDocumento || '—'})`;
-      }
+        `   Retribución: ${retrib}  ·  Autónomo societario: ${yn(a.esAutonomoSocietario)}`;
       if (a.esAutonomoSocietario) {
         linea += `\n   Nº afiliación SS: ${a.numeroAfiliacionSS || '—'}  ·  Mutua: ${a.mutua || '—'}  ·  IBAN: ${a.iban || '—'}`;
       }
       blocks.push(...paragraphs(linea));
     });
   }
+
+  // 5) REPRESENTANTES (de personas jurídicas: socios y administradores)
+  const reps: string[] = [];
+  formData.socios.forEach((s, i) => {
+    if (s.tipo === 'sociedad') {
+      const rn = [s.representanteNombre, s.representanteApellidos].filter(Boolean).join(' ') || '—';
+      reps.push(`Socio ${i + 1} (${s.nombre || '—'}): ${rn} — ${s.representanteDocumento || '—'}`);
+    }
+  });
+  formData.administradores.forEach((a, i) => {
+    if (a.tipo === 'sociedad') {
+      const rn = [a.representanteNombre, a.representanteApellidos].filter(Boolean).join(' ') || '—';
+      reps.push(`Administrador ${i + 1} (${a.nombre || '—'}): ${rn} — ${a.representanteDocumento || '—'}`);
+    }
+  });
+  blocks.push(heading('REPRESENTANTES'));
+  blocks.push(...paragraphs(reps.length ? reps.join('\n') : 'No hay personas jurídicas con representante.'));
+
+  // 6) CENTRO DE ACTIVIDAD (+ actividad principal y secundarias en texto)
+  blocks.push(heading('CENTRO DE ACTIVIDAD'));
+  const centroLines: string[] = [];
+  if (formData.mismoCentroActividad === false) {
+    const c = formData.centroActividad;
+    centroLines.push(`Domicilio: ${formatDireccion(c.direccion)}`);
+    centroLines.push(`Superficie: ${c.superficie || '—'} m²  ·  % afecto a la actividad: ${c.porcentajeActividad || '—'}%`);
+  } else {
+    centroLines.push('Domicilio: (mismo que el domicilio social)');
+    centroLines.push(
+      `Superficie: ${formData.domicilio.superficie || '—'} m²  ·  ` +
+      `% afecto a la actividad: ${formData.domicilio.porcentajeActividad || '—'}%`
+    );
+  }
+  const secundarias = formData.actividadesSecundarias.filter(Boolean);
+  centroLines.push(`Actividad principal: ${formData.actividadPrincipal || '—'}`);
+  centroLines.push(`Actividades secundarias: ${secundarias.length ? secundarias.join(' | ') : '—'}`);
+  centroLines.push(`ROI intracomunitario: ${yn(formData.roi)}  ·  Fecha inicio actividad: ${formData.fechaInicioActividad || '—'}`);
+  blocks.push(...paragraphs(centroLines.join('\n')));
 
   return blocks;
 }
@@ -184,18 +248,9 @@ function getEmailSolicitante(formData: FormData): string {
   return primerSocio?.email || '';
 }
 
+// Capital social declarado por el cliente (campo propio, ya no derivado de la suma)
 function capitalTotal(formData: FormData): number {
-  let total = 0;
-  for (const socio of formData.socios) {
-    if (
-      socio.tipoAportacion === 'dineraria_acreditada' ||
-      socio.tipoAportacion === 'dineraria_no_acreditada'
-    ) {
-      const amount = parseFloat(socio.aportacion.replace(',', '.'));
-      if (!isNaN(amount)) total += amount;
-    }
-  }
-  return total;
+  return parseAmount(formData.capitalSocial);
 }
 
 async function sendEmails(formData: FormData) {
@@ -292,15 +347,10 @@ export async function POST(request: NextRequest) {
     const denomCampos = denominacionesPorCampo(formData);
     const metodoLabel = METODO_DENOM_LABEL[formData.metodoDenominacion] || null;
     const tipoAdminLabel = TIPO_ADMIN_LABEL[formData.tipoAdministracion] || null;
+    const duracionLabel = DURACION_LABEL[formData.duracionSociedad] || 'Indefinida';
+    const actividadesSecText = formData.actividadesSecundarias.filter(Boolean).join(' | ');
 
-    const domicilioText = [
-      formData.domicilio.direccion,
-      formData.domicilio.municipio,
-      formData.domicilio.codigoPostal,
-      formData.domicilio.provincia,
-    ]
-      .filter(Boolean)
-      .join(', ');
+    const domicilioText = formatDireccion(formData.domicilio.direccion);
 
     let createdPageId = '';
     try {
@@ -340,8 +390,17 @@ export async function POST(request: NextRequest) {
         'Denominación 5': {
           rich_text: richText(denomCampos[4]),
         },
-        'Actividad CNAE': {
-          rich_text: richText(formData.actividad),
+        'Actividad principal': {
+          rich_text: richText(formData.actividadPrincipal),
+        },
+        'Actividades secundarias': {
+          rich_text: richText(actividadesSecText),
+        },
+        'Cierre ejercicio': {
+          rich_text: richText(formData.cierreEjercicio),
+        },
+        'Duración sociedad': {
+          select: { name: duracionLabel },
         },
         'ROI intracomunitario': {
           checkbox: formData.roi === true,
@@ -350,13 +409,13 @@ export async function POST(request: NextRequest) {
           rich_text: richText(domicilioText),
         },
         'Provincia': {
-          rich_text: richText(formData.domicilio.provincia),
+          rich_text: richText(formData.domicilio.direccion.provincia),
         },
         'Municipio': {
-          rich_text: richText(formData.domicilio.municipio),
+          rich_text: richText(formData.domicilio.direccion.municipio),
         },
         'Código postal': {
-          rich_text: richText(formData.domicilio.codigoPostal),
+          rich_text: richText(formData.domicilio.direccion.codigoPostal),
         },
         'Superficie m2': {
           number: parseFloat(formData.domicilio.superficie) || 0,

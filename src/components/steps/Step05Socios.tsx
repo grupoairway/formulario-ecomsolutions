@@ -1,6 +1,7 @@
 'use client';
 
-import { FormData, Socio, TipoAportacion, createEmptySocio, PROVINCIAS, ESTADOS_CIVILES } from '@/lib/types';
+import { FormData, Socio, TipoAportacion, createEmptySocio, ESTADOS_CIVILES, SEXOS } from '@/lib/types';
+import { DireccionForm } from './DireccionForm';
 import styles from './steps.module.css';
 
 interface Props {
@@ -18,15 +19,13 @@ const APORTACION_INFO: Record<TipoAportacion, string> = {
     'Aportación en dinero sin acreditar. El socio asume responsabilidad solidaria de su veracidad.',
 };
 
-function capitalDinerario(socios: Socio[]): number {
-  let total = 0;
-  for (const s of socios) {
-    if (s.tipoAportacion === 'dineraria_acreditada' || s.tipoAportacion === 'dineraria_no_acreditada') {
-      const v = parseFloat(s.aportacion.replace(',', '.'));
-      if (!isNaN(v)) total += v;
-    }
-  }
-  return total;
+function parseNum(s: string): number {
+  const n = parseFloat((s || '').replace(',', '.'));
+  return isNaN(n) ? 0 : n;
+}
+
+function euros(n: number): string {
+  return n.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + '€';
 }
 
 function SocioBlock({
@@ -121,6 +120,27 @@ function SocioBlock({
         </div>
       )}
 
+      {/* Sexo — solo persona física */}
+      {esPersonaFisica && (
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>Sexo <span className={styles.required}>*</span></label>
+          <div className={styles.radioInline}>
+            {SEXOS.map((s) => (
+              <label
+                key={s.value}
+                className={`${styles.radioBtn} ${socio.sexo === s.value ? styles.selected : ''}`}
+                onClick={() => onUpdate({ sexo: s.value })}
+              >
+                {s.label}
+              </label>
+            ))}
+          </div>
+          {errors.includes(`${prefix}sexo`) && (
+            <div className={styles.errorMsg}>⚠ Selecciona el sexo.</div>
+          )}
+        </div>
+      )}
+
       {/* Documento e email */}
       <div className={styles.fieldRow}>
         <div>
@@ -190,6 +210,24 @@ function SocioBlock({
         </div>
       </div>
 
+      {/* Fecha inscripción registral — solo persona jurídica */}
+      {!esPersonaFisica && (
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>
+            Fecha de inscripción registral <span className={styles.required}>*</span>
+          </label>
+          <input
+            type="date"
+            className={`${styles.input} ${errors.includes(`${prefix}fechaInscripcion`) ? styles.error : ''}`}
+            value={socio.fechaInscripcion}
+            onChange={(e) => onUpdate({ fechaInscripcion: e.target.value })}
+          />
+          {errors.includes(`${prefix}fechaInscripcion`) && (
+            <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+          )}
+        </div>
+      )}
+
       {/* Estado civil — solo persona física */}
       {esPersonaFisica && (
         <div className={styles.fieldGroup}>
@@ -212,6 +250,55 @@ function SocioBlock({
         </div>
       )}
 
+      {/* Representante — solo persona jurídica */}
+      {!esPersonaFisica && (
+        <div>
+          <p style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--color-muted)', marginBottom: 12 }}>
+            Representante de la persona jurídica
+          </p>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              Nombre del representante <span className={styles.required}>*</span>
+            </label>
+            <input
+              type="text"
+              className={`${styles.input} ${errors.includes(`${prefix}representanteNombre`) ? styles.error : ''}`}
+              placeholder="Nombre"
+              value={socio.representanteNombre}
+              onChange={(e) => onUpdate({ representanteNombre: e.target.value })}
+            />
+            {errors.includes(`${prefix}representanteNombre`) && (
+              <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+            )}
+          </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>Apellidos del representante</label>
+            <input
+              type="text"
+              className={styles.input}
+              placeholder="Apellidos"
+              value={socio.representanteApellidos}
+              onChange={(e) => onUpdate({ representanteApellidos: e.target.value })}
+            />
+          </div>
+          <div className={styles.fieldGroup}>
+            <label className={styles.label}>
+              DNI / NIE del representante <span className={styles.required}>*</span>
+            </label>
+            <input
+              type="text"
+              className={`${styles.input} ${errors.includes(`${prefix}representanteDocumento`) ? styles.error : ''}`}
+              placeholder="12345678A"
+              value={socio.representanteDocumento}
+              onChange={(e) => onUpdate({ representanteDocumento: e.target.value.toUpperCase() })}
+            />
+            {errors.includes(`${prefix}representanteDocumento`) && (
+              <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Domicilio */}
       <div className={styles.fieldGroup}>
         <label className={styles.label}>Domicilio <span className={styles.required}>*</span></label>
@@ -231,12 +318,11 @@ function SocioBlock({
         </div>
         {!socio.mismoDomicilio && (
           <div style={{ marginTop: 12 }}>
-            <input
-              type="text"
-              className={styles.input}
-              placeholder="Dirección completa (calle, número, municipio, CP...)"
-              value={socio.direccionAlternativa}
-              onChange={(e) => onUpdate({ direccionAlternativa: e.target.value })}
+            <DireccionForm
+              data={socio.direccion}
+              onChange={(u) => onUpdate({ direccion: { ...socio.direccion, ...u } })}
+              prefix={`${prefix}dir_`}
+              errors={errors}
             />
           </div>
         )}
@@ -275,36 +361,45 @@ function SocioBlock({
         )}
       </div>
 
-      {/* Aportación */}
+      {/* Importe de aportación (siempre que haya tipo) */}
       {socio.tipoAportacion && (
         <div className={styles.fieldGroup}>
           <label className={styles.label}>
             {socio.tipoAportacion === 'no_dineraria'
-              ? 'Descripción de los bienes aportados'
+              ? 'Valoración de los bienes aportados (€)'
               : 'Importe de la aportación (€)'}
             {' '}<span className={styles.required}>*</span>
           </label>
-          {socio.tipoAportacion === 'no_dineraria' ? (
-            <textarea
-              className={`${styles.textarea} ${errors.includes(`${prefix}aportacion`) ? styles.error : ''}`}
-              placeholder="Describe los bienes que aportas (tipo, valor estimado...)"
-              rows={3}
-              value={socio.aportacion}
-              onChange={(e) => onUpdate({ aportacion: e.target.value })}
-            />
-          ) : (
-            <input
-              type="number"
-              min="1"
-              step="0.01"
-              className={`${styles.input} ${errors.includes(`${prefix}aportacion`) ? styles.error : ''}`}
-              placeholder="3000.00"
-              value={socio.aportacion}
-              onChange={(e) => onUpdate({ aportacion: e.target.value })}
-            />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            className={`${styles.input} ${errors.includes(`${prefix}importe`) ? styles.error : ''}`}
+            placeholder="3000.00"
+            value={socio.importeAportacion}
+            onChange={(e) => onUpdate({ importeAportacion: e.target.value })}
+          />
+          {errors.includes(`${prefix}importe`) && (
+            <div className={styles.errorMsg}>⚠ Introduce el importe/valoración de la aportación.</div>
           )}
-          {errors.includes(`${prefix}aportacion`) && (
-            <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+        </div>
+      )}
+
+      {/* Descripción de bienes — solo no dineraria */}
+      {socio.tipoAportacion === 'no_dineraria' && (
+        <div className={styles.fieldGroup}>
+          <label className={styles.label}>
+            Descripción de los bienes aportados <span className={styles.required}>*</span>
+          </label>
+          <textarea
+            className={`${styles.textarea} ${errors.includes(`${prefix}descripcionBienes`) ? styles.error : ''}`}
+            placeholder="Describe los bienes que aportas (tipo, características, valor estimado...)"
+            rows={3}
+            value={socio.descripcionBienes}
+            onChange={(e) => onUpdate({ descripcionBienes: e.target.value })}
+          />
+          {errors.includes(`${prefix}descripcionBienes`) && (
+            <div className={styles.errorMsg}>⚠ Describe los bienes aportados.</div>
           )}
         </div>
       )}
@@ -313,7 +408,7 @@ function SocioBlock({
 }
 
 export default function Step05Socios({ formData, onChange, errors }: Props) {
-  const { socios } = formData;
+  const { socios, capitalSocial } = formData;
 
   function updateSocio(index: number, updates: Partial<Socio>) {
     const next = socios.map((s, i) => (i === index ? { ...s, ...updates } : s));
@@ -329,10 +424,36 @@ export default function Step05Socios({ formData, onChange, errors }: Props) {
     onChange({ socios: socios.filter((_, i) => i !== index) });
   }
 
-  const capital = capitalDinerario(socios);
+  const capital = parseNum(capitalSocial);
+  const totalAportado = socios.reduce((sum, s) => sum + parseNum(s.importeAportacion), 0);
+  const cuadra = capital > 0 && Math.abs(totalAportado - capital) < 0.005;
+  const diferencia = capital - totalAportado;
 
   return (
     <div>
+      {/* Capital social */}
+      <div className={styles.fieldGroup}>
+        <label className={styles.label}>
+          Capital social (€) <span className={styles.required}>*</span>
+        </label>
+        <input
+          type="number"
+          min="0"
+          step="0.01"
+          className={`${styles.input} ${errors.includes('capitalSocial') ? styles.error : ''}`}
+          placeholder="3000.00"
+          value={capitalSocial}
+          onChange={(e) => onChange({ capitalSocial: e.target.value })}
+        />
+        {errors.includes('capitalSocial') && (
+          <div className={styles.errorMsg}>⚠ Introduce el capital social.</div>
+        )}
+        <div className={styles.infoNote} style={{ marginTop: 10 }}>
+          <span className={styles.infoNoteIcon}>ℹ️</span>
+          El capital social debe coincidir con la suma de las aportaciones de todos los socios.
+        </div>
+      </div>
+
       {socios.map((socio, i) => (
         <SocioBlock
           key={socio.id}
@@ -351,12 +472,25 @@ export default function Step05Socios({ formData, onChange, errors }: Props) {
         </button>
       )}
 
+      {/* Resumen de cuadre */}
       <div className={styles.capitalTotal}>
-        <span className={styles.capitalLabel}>Capital social total (dinerario)</span>
-        <span className={styles.capitalAmount}>
-          {capital.toLocaleString('es-ES', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}€
-        </span>
+        <span className={styles.capitalLabel}>Total aportado por los socios</span>
+        <span className={styles.capitalAmount}>{euros(totalAportado)}</span>
       </div>
+
+      {capital > 0 && (
+        cuadra ? (
+          <div className={styles.infoNote} style={{ marginTop: 12 }}>
+            <span className={styles.infoNoteIcon}>✅</span>
+            El total aportado coincide con el capital social.
+          </div>
+        ) : (
+          <div className={styles.errorMsg} style={{ marginTop: 12 }}>
+            ⚠ El total aportado ({euros(totalAportado)}) no coincide con el capital social ({euros(capital)}).
+            {' '}Diferencia: {euros(Math.abs(diferencia))} {diferencia > 0 ? '(falta por aportar)' : '(exceso aportado)'}.
+          </div>
+        )
+      )}
     </div>
   );
 }

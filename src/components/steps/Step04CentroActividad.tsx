@@ -1,7 +1,7 @@
 'use client';
 
 import { FormData } from '@/lib/types';
-import { DomicilioForm } from './Step03Domicilio';
+import { LocalDomicilioForm } from './DireccionForm';
 import styles from './steps.module.css';
 
 interface Props {
@@ -12,6 +12,15 @@ interface Props {
 
 export default function Step04CentroActividad({ formData, onChange, errors }: Props) {
   const { mismoCentroActividad, centroActividad, domicilio } = formData;
+
+  const d = domicilio.direccion;
+  const resumenSocial = [
+    [d.tipoVia, d.nombreVia, d.numero].filter(Boolean).join(' '),
+    d.municipio,
+    d.provincia,
+  ]
+    .filter(Boolean)
+    .join(', ');
 
   return (
     <div>
@@ -43,11 +52,7 @@ export default function Step04CentroActividad({ formData, onChange, errors }: Pr
         <div className={styles.infoNote}>
           <span className={styles.infoNoteIcon}>✅</span>
           El centro de actividad será:{' '}
-          <strong>
-            {[domicilio.direccion, domicilio.municipio, domicilio.provincia]
-              .filter(Boolean)
-              .join(', ') || 'el domicilio social indicado en el paso anterior'}
-          </strong>
+          <strong>{resumenSocial || 'el domicilio social indicado en el paso anterior'}</strong>
         </div>
       )}
 
@@ -56,7 +61,7 @@ export default function Step04CentroActividad({ formData, onChange, errors }: Pr
           <p style={{ fontSize: '0.875rem', color: 'var(--color-muted)', marginBottom: 20 }}>
             Introduce los datos del centro de actividad alternativo:
           </p>
-          <DomicilioForm
+          <LocalDomicilioForm
             data={centroActividad}
             onChange={(updates) =>
               onChange({ centroActividad: { ...centroActividad, ...updates } })

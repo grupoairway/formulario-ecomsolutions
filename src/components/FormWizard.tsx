@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { FormData, initialFormData, createEmptySocio, createEmptyAdministrador } from '@/lib/types';
+import { FormData, DireccionDetallada, initialFormData, createEmptySocio, createEmptyAdministrador } from '@/lib/types';
 import StepIndicator from './StepIndicator';
 import Step01Denominacion from './steps/Step01Denominacion';
 import Step02Empresa from './steps/Step02Empresa';
@@ -25,6 +25,16 @@ const STEP_TITLES = [
 
 const TOTAL_STEPS = 7;
 
+function validateDireccion(dir: DireccionDetallada, prefix: string, errors: string[]) {
+  if (!dir.tipoVia) errors.push(`${prefix}tipoVia`);
+  if (!dir.nombreVia.trim()) errors.push(`${prefix}nombreVia`);
+  if (!dir.numero.trim()) errors.push(`${prefix}numero`);
+  if (!dir.provincia) errors.push(`${prefix}provincia`);
+  if (!dir.municipio.trim()) errors.push(`${prefix}municipio`);
+  if (!dir.codigoPostal || dir.codigoPostal.length !== 5) errors.push(`${prefix}codigoPostal`);
+  // bloque / piso / puerta son opcionales
+}
+
 function validateStep(step: number, data: FormData): string[] {
   const errors: string[] = [];
 
@@ -39,16 +49,15 @@ function validateStep(step: number, data: FormData): string[] {
   }
 
   if (step === 1) {
-    if (!data.actividad.trim()) errors.push('actividad');
+    if (!data.actividadPrincipal.trim()) errors.push('actividadPrincipal');
     if (data.roi === null) errors.push('roi');
+    if (!data.cierreEjercicio.trim()) errors.push('cierreEjercicio');
+    if (data.duracionSociedad === 'determinada' && !data.duracionAnios.trim())
+      errors.push('duracionAnios');
   }
 
   if (step === 2) {
-    if (!data.domicilio.provincia) errors.push('dom_provincia');
-    if (!data.domicilio.municipio.trim()) errors.push('dom_municipio');
-    if (!data.domicilio.codigoPostal || data.domicilio.codigoPostal.length !== 5)
-      errors.push('dom_codigoPostal');
-    if (!data.domicilio.direccion.trim()) errors.push('dom_direccion');
+    validateDireccion(data.domicilio.direccion, 'dom_', errors);
     if (!data.domicilio.superficie) errors.push('dom_superficie');
     if (!data.domicilio.porcentajeActividad) errors.push('dom_porcentajeActividad');
   }
@@ -56,29 +65,43 @@ function validateStep(step: number, data: FormData): string[] {
   if (step === 3) {
     if (data.mismoCentroActividad === null) errors.push('mismoCentroActividad');
     if (data.mismoCentroActividad === false) {
-      if (!data.centroActividad.provincia) errors.push('centro_provincia');
-      if (!data.centroActividad.municipio.trim()) errors.push('centro_municipio');
-      if (!data.centroActividad.codigoPostal || data.centroActividad.codigoPostal.length !== 5)
-        errors.push('centro_codigoPostal');
-      if (!data.centroActividad.direccion.trim()) errors.push('centro_direccion');
+      validateDireccion(data.centroActividad.direccion, 'centro_', errors);
       if (!data.centroActividad.superficie) errors.push('centro_superficie');
       if (!data.centroActividad.porcentajeActividad) errors.push('centro_porcentajeActividad');
     }
   }
 
   if (step === 4) {
+    // Capital social: obligatorio y > 0 (bloqueante). El DESCUADRE con la suma de
+    // aportaciones NO bloquea: solo se muestra como aviso visible en el paso.
+    const capital = parseFloat((data.capitalSocial || '').replace(',', '.'));
+    if (!data.capitalSocial.trim() || isNaN(capital) || capital <= 0) errors.push('capitalSocial');
+
     if (data.socios.length === 0) errors.push('socios_empty');
     data.socios.forEach((s, i) => {
       const p = `socio${i}_`;
+      const esFisica = s.tipo !== 'sociedad';
       if (!s.nombre.trim()) errors.push(`${p}nombre`);
-      if (s.tipo !== 'sociedad' && !s.primerApellido.trim()) errors.push(`${p}primerApellido`);
+      if (esFisica && !s.primerApellido.trim()) errors.push(`${p}primerApellido`);
+      if (esFisica && !s.sexo) errors.push(`${p}sexo`);
       if (!s.documento.trim()) errors.push(`${p}documento`);
       if (i === 0 && !s.email.trim()) errors.push(`${p}email`);
       if (!s.fechaNacimientoConstitucion) errors.push(`${p}fecha`);
       if (!s.nacionalidad.trim()) errors.push(`${p}nacionalidad`);
-      if (s.tipo !== 'sociedad' && !s.estadoCivil) errors.push(`${p}estadoCivil`);
+      if (esFisica && !s.estadoCivil) errors.push(`${p}estadoCivil`);
+      if (!esFisica) {
+        if (!s.fechaInscripcion) errors.push(`${p}fechaInscripcion`);
+        if (!s.representanteNombre.trim()) errors.push(`${p}representanteNombre`);
+        if (!s.representanteDocumento.trim()) errors.push(`${p}representanteDocumento`);
+      }
+      if (!s.mismoDomicilio) validateDireccion(s.direccion, `${p}dir_`, errors);
       if (!s.tipoAportacion) errors.push(`${p}tipoAportacion`);
-      if (s.tipoAportacion && !s.aportacion.trim()) errors.push(`${p}aportacion`);
+      if (s.tipoAportacion) {
+        const imp = parseFloat((s.importeAportacion || '').replace(',', '.'));
+        if (!s.importeAportacion.trim() || isNaN(imp) || imp <= 0) errors.push(`${p}importe`);
+        if (s.tipoAportacion === 'no_dineraria' && !s.descripcionBienes.trim())
+          errors.push(`${p}descripcionBienes`);
+      }
     });
   }
 
