@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormData, initialFormData, createEmptySocio, createEmptyAdministrador } from '@/lib/types';
 import StepIndicator from './StepIndicator';
@@ -112,11 +112,18 @@ export default function FormWizard() {
   const [errors, setErrors] = useState<string[]>([]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState('');
+  const [clienteId, setClienteId] = useState('');
   const [formData, setFormData] = useState<FormData>(() => ({
     ...initialFormData,
     socios: [createEmptySocio()],
     administradores: [createEmptyAdministrador()],
   }));
+
+  // Lee ?cliente=NOTION_PAGE_ID de la URL para enlazar el registro con el Cliente
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get('cliente') || '';
+    if (id) setClienteId(id);
+  }, []);
 
   function updateFormData(updates: Partial<FormData>) {
     setFormData((prev) => ({ ...prev, ...updates }));
@@ -153,7 +160,7 @@ export default function FormWizard() {
       const res = await fetch('/api/constitucion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({ ...formData, clienteId }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
