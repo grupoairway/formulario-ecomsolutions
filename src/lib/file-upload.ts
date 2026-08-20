@@ -1,4 +1,10 @@
-import { FileAttachment } from './types-autonomo';
+/**
+ * Forma mínima de un adjunto. Estructural a propósito: la usan tanto
+ * FileAttachment (autónomo) como FileAttachmentRenta, que son idénticos.
+ */
+export interface AdjuntoBase {
+  data: string;
+}
 
 /** Lado mayor al que se redimensionan las imágenes antes de subirlas. */
 export const MAX_EDGE_PX = 1600;
@@ -23,12 +29,12 @@ export function isCompressible(type: string): boolean {
 }
 
 /** Lo que ocupará el adjunto en el JSON: la data-URL base64 ya codificada. */
-export function attachmentBytes(file: FileAttachment | null): number {
+export function attachmentBytes(file: AdjuntoBase | null | undefined): number {
   return file?.data?.length ?? 0;
 }
 
-export function totalUploadBytes(files: (FileAttachment | null)[]): number {
-  return files.reduce((sum, f) => sum + attachmentBytes(f), 0);
+export function totalUploadBytes(files: (AdjuntoBase | null | undefined)[]): number {
+  return files.reduce((sum: number, f) => sum + attachmentBytes(f), 0);
 }
 
 export function formatMB(bytes: number): string {

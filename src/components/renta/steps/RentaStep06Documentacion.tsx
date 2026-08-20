@@ -1,7 +1,17 @@
 'use client';
 
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { RentaFormData, FileAttachmentRenta, DocStatus } from '@/lib/types-renta';
+import {
+  compressImage,
+  formatMB,
+  isCompressible,
+  readAsDataUrl,
+  totalUploadBytes,
+  MAX_IMAGE_INPUT_MB,
+  MAX_PDF_MB,
+  MAX_TOTAL_UPLOAD_BYTES,
+} from '@/lib/file-upload';
 import styles from '../../steps/steps.module.css';
 import docStyles from './documentacion.module.css';
 
@@ -11,14 +21,6 @@ interface Props {
   errors: string[];
 }
 
-function readFile(file: File): Promise<FileAttachmentRenta> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve({ name: file.name, size: file.size, type: file.type, data: reader.result as string });
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 function fmt(bytes: number) {
   return bytes < 1024 * 1024 ? `${Math.round(bytes / 1024)} KB` : `${(bytes / 1024 / 1024).toFixed(1)} MB`;
@@ -32,13 +34,65 @@ function FileUpload({
   required?: boolean; hasError?: boolean;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const [fileError, setFileError] = useState('');
+  const [processing, setProcessing] = useState(false);
 
   async function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
+    const input = e.target;
+    const f = input.files?.[0];
     if (!f) return;
-    const att = await readFile(f);
-    onFile(att);
-    if (inputRef.current) inputRef.current.value = '';
+    setFileError('');
+
+    // ── PDF: no se puede comprimir en el navegador, tope duro ──────────────
+    if (f.type === 'application/pdf') {
+      if (f.size > MAX_PDF_MB * 1024 * 1024) {
+        setFileError(
+          `Este PDF pesa ${formatMB(f.size)} y el máximo son ${MAX_PDF_MB} MB. ` +
+            'Los PDF no se pueden comprimir desde el navegador. Lo más rápido: haz ' +
+            'una foto del documento con el móvil y súbela — esa sí se comprime sola.',
+        );
+        input.value = '';
+        return;
+      }
+      setProcessing(true);
+      try {
+        onFile({ name: f.name, size: f.size, type: f.type, data: await readAsDataUrl(f) });
+      } catch {
+        setFileError('No se pudo leer el archivo. Inténtalo de nuevo.');
+      } finally {
+        setProcessing(false);
+        input.value = '';
+      }
+      return;
+    }
+
+    if (!isCompressible(f.type)) {
+      setFileError('Formato no admitido. Sube una foto (JPG o PNG) o un PDF.');
+      input.value = '';
+      return;
+    }
+
+    if (f.size > MAX_IMAGE_INPUT_MB * 1024 * 1024) {
+      setFileError(`La imagen pesa ${formatMB(f.size)} y el máximo son ${MAX_IMAGE_INPUT_MB} MB.`);
+      input.value = '';
+      return;
+    }
+
+    // ── Imagen: se redimensiona y reencodea antes de tocar la red ──────────
+    setProcessing(true);
+    try {
+      const c = await compressImage(f);
+      console.log(
+        `[upload] ${label}: ${formatMB(f.size)} → ${formatMB(c.size)} ` +
+          `(payload ${c.dataUrl.length} bytes)`,
+      );
+      onFile({ name: c.name, size: c.size, type: c.type, data: c.dataUrl });
+    } catch {
+      setFileError('No se pudo procesar la imagen. Prueba con otra foto.');
+    } finally {
+      setProcessing(false);
+      input.value = '';
+    }
   }
 
   if (file) {
@@ -57,14 +111,21 @@ function FileUpload({
   return (
     <>
       <div
-        className={`${docStyles.dropzone} ${hasError ? docStyles.dropzoneError : ''}`}
+        className={`${docStyles.dropzone} ${hasError || fileError ? docStyles.dropzoneError : ''}`}
+        style={processing ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
         onClick={() => inputRef.current?.click()}
       >
-        <span className={docStyles.dropzoneIcon}>📎</span>
-        <span className={docStyles.dropzoneText}>{label}{required && ' *'}</span>
-        {hint && <span className={docStyles.dropzoneHint}>{hint}</span>}
+        <span className={docStyles.dropzoneIcon}>{processing ? '⏳' : '📎'}</span>
+        <span className={docStyles.dropzoneText}>
+          {processing ? 'Optimizando imagen…' : `${label}${required ? ' *' : ''}`}
+        </span>
+        {hint && !processing && <span className={docStyles.dropzoneHint}>{hint}</span>}
+        <span className={docStyles.dropzoneHint}>
+          JPG o PNG hasta {MAX_IMAGE_INPUT_MB} MB · PDF hasta {MAX_PDF_MB} MB · las fotos se optimizan solas
+        </span>
       </div>
-      <input ref={inputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" hidden onChange={handleChange} />
+      {fileError && <div className={styles.errorMsg}>⚠ {fileError}</div>}
+      <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp,application/pdf" hidden onChange={handleChange} />
     </>
   );
 }
@@ -194,6 +255,10 @@ function DocEntregaRow({
 }
 
 export default function RentaStep06Documentacion({ formData, onChange, errors }: Props) {
+  const totalBytes = totalUploadBytes([
+    formData.dniAnverso, formData.dniReverso, formData.borradorHacienda,
+  ]);
+
   function setDoc(key: string, val: FileAttachmentRenta | null, field: 'dniAnverso' | 'dniReverso' | 'borradorHacienda') {
     onChange({ [field]: val });
   }
@@ -250,12 +315,25 @@ export default function RentaStep06Documentacion({ formData, onChange, errors }:
         </div>
         <FileUpload
           label="Subir borrador / propuesta de declaración"
-          hint="PDF, JPG o PNG · Máx. 10 MB"
           file={formData.borradorHacienda}
           onFile={(f) => setDoc('borradorHacienda', f, 'borradorHacienda')}
           onRemove={() => setDoc('borradorHacienda', null, 'borradorHacienda')}
         />
       </div>
+
+      {errors.includes('totalArchivos') && (
+        <div className={styles.errorMsg} style={{ marginBottom: 16 }}>
+          ⚠ Los archivos suman {formatMB(totalBytes)} y el máximo que admite el envío
+          son {formatMB(MAX_TOTAL_UPLOAD_BYTES)}. Sustituye alguno por una foto en vez
+          de un PDF, o vuelve a hacer la foto con menos resolución.
+        </div>
+      )}
+
+      {totalBytes > 0 && !errors.includes('totalArchivos') && (
+        <div style={{ fontSize: '0.8rem', color: 'var(--color-muted)', marginBottom: 24 }}>
+          Total adjunto: {formatMB(totalBytes)} de {formatMB(MAX_TOTAL_UPLOAD_BYTES)} disponibles.
+        </div>
+      )}
 
       {/* Lista de documentos condicional */}
       {docList.length > 0 && (

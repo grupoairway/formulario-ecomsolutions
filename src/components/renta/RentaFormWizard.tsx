@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RentaFormData, initialRentaFormData } from '@/lib/types-renta';
 import { validarNoFutura } from '@/lib/fechas';
+import { totalUploadBytes, formatMB, MAX_TOTAL_UPLOAD_BYTES } from '@/lib/file-upload';
 import RentaStepIndicator from './RentaStepIndicator';
 import RentaStep01DatosPersonales from './steps/RentaStep01DatosPersonales';
 import RentaStep02SituacionFamiliar from './steps/RentaStep02SituacionFamiliar';
@@ -65,6 +66,8 @@ function validateStep(step: number, data: RentaFormData): string[] {
   if (step === 5) {
     if (!data.dniAnverso) errors.push('dniAnverso');
     if (!data.dniReverso) errors.push('dniReverso');
+    const total = totalUploadBytes([data.dniAnverso, data.dniReverso, data.borradorHacienda]);
+    if (total > MAX_TOTAL_UPLOAD_BYTES) errors.push('totalArchivos');
   }
 
   if (step === 6) {
@@ -115,12 +118,32 @@ export default function RentaFormWizard() {
     setSubmitting(true);
     setSubmitError('');
     try {
+      // Guarda final: el cuerpo debe caber en el límite de la plataforma o la
+      // petición muere con 413 antes de llegar a la API.
+      const total = totalUploadBytes([formData.dniAnverso, formData.dniReverso, formData.borradorHacienda]);
+      if (total > MAX_TOTAL_UPLOAD_BYTES) {
+        throw new Error(
+          `Los archivos adjuntos suman ${formatMB(total)} y el máximo son ` +
+            `${formatMB(MAX_TOTAL_UPLOAD_BYTES)}. Vuelve al paso de documentación y ` +
+            'sustituye alguno por una foto más ligera.',
+        );
+      }
       const res = await fetch('/api/renta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(formData),
       });
       if (!res.ok) {
+        // 413 lo genera la plataforma, no la API: el cuerpo es text/plain y
+        // res.json() falla, así que sin este caso el cliente solo veía
+        // "Error al enviar el formulario" y reintentaba a ciegas para siempre.
+        if (res.status === 413) {
+          throw new Error(
+            'Los archivos adjuntos son demasiado grandes para enviarse. Vuelve al ' +
+              'paso de documentación y sube fotos más ligeras (o haz la foto de nuevo ' +
+              'con menos resolución).',
+          );
+        }
         const data = await res.json().catch(() => ({}));
         throw new Error(data.error ?? 'Error al enviar el formulario.');
       }
