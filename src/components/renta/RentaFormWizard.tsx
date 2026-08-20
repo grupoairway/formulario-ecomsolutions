@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { RentaFormData, initialRentaFormData } from '@/lib/types-renta';
+import { validarNoFutura } from '@/lib/fechas';
 import RentaStepIndicator from './RentaStepIndicator';
 import RentaStep01DatosPersonales from './steps/RentaStep01DatosPersonales';
 import RentaStep02SituacionFamiliar from './steps/RentaStep02SituacionFamiliar';
@@ -31,7 +32,13 @@ function validateStep(step: number, data: RentaFormData): string[] {
   if (step === 0) {
     if (!data.nombreCompleto.trim()) errors.push('nombreCompleto');
     if (!data.nif.trim()) errors.push('nif');
-    if (!data.fechaNacimiento) errors.push('fechaNacimiento');
+    if (!data.fechaNacimiento) {
+      errors.push('fechaNacimiento');
+    } else {
+      // No se exige mayoría de edad: un menor puede tener obligación de declarar.
+      const err = validarNoFutura(data.fechaNacimiento);
+      if (err) errors.push(`fechaNacimiento_${err}`);
+    }
     if (!data.estadoCivil) errors.push('estadoCivil');
     if (!data.declaracionTipo) errors.push('declaracionTipo');
     if (data.declaracionTipo === 'conjunta') {
@@ -47,6 +54,12 @@ function validateStep(step: number, data: RentaFormData): string[] {
     if (!data.email.trim() || !data.email.includes('@')) errors.push('email');
     if (data.cambioDomicilio === null) errors.push('cambioDomicilio');
     if (!data.claveCertificado) errors.push('claveCertificado');
+  }
+
+  if (step === 1) {
+    if (data.hijos.some((h) => h.fechaNacimiento && validarNoFutura(h.fechaNacimiento))) {
+      errors.push('hijos_fecha');
+    }
   }
 
   if (step === 5) {

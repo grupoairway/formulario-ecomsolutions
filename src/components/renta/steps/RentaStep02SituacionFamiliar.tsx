@@ -1,6 +1,7 @@
 'use client';
 
 import { RentaFormData, HijoRenta, AscendienteRenta, PARENTESCO_OPTIONS } from '@/lib/types-renta';
+import { minNacimiento, hoyISO } from '@/lib/fechas';
 import styles from '../../steps/steps.module.css';
 
 interface Props {
@@ -17,7 +18,7 @@ function newAscendiente(): AscendienteRenta {
   return { id: crypto.randomUUID(), nombre: '', nif: '', parentesco: '', discapacidad: false, gradoDiscapacidad: '', conviveTodoElAnio: null };
 }
 
-export default function RentaStep02SituacionFamiliar({ formData, onChange }: Props) {
+export default function RentaStep02SituacionFamiliar({ formData, onChange, errors }: Props) {
   const { hijos, ascendientes } = formData;
 
   function updateHijo(id: string, field: keyof HijoRenta, value: string | boolean | null) {
@@ -77,6 +78,7 @@ export default function RentaStep02SituacionFamiliar({ formData, onChange }: Pro
                 <div>
                   <label className={styles.label}>Fecha de nacimiento</label>
                   <input type="date" className={styles.input}
+                    min={minNacimiento()} max={hoyISO()}
                     value={hijo.fechaNacimiento} onChange={(e) => updateHijo(hijo.id, 'fechaNacimiento', e.target.value)} />
                 </div>
                 <div>
@@ -108,6 +110,12 @@ export default function RentaStep02SituacionFamiliar({ formData, onChange }: Pro
             </div>
           ))}
           <button type="button" className={styles.btnAdd} onClick={addHijo}>+ Añadir otro hijo/a</button>
+          {errors.includes('hijos_fecha') && (
+            <div className={styles.errorMsg}>
+              ⚠ Alguna fecha de nacimiento no es válida. Revisa que el año tenga 4 cifras
+              y que la fecha no esté en el futuro.
+            </div>
+          )}
         </div>
       )}
 

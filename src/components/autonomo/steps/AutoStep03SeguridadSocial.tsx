@@ -67,13 +67,27 @@ export default function AutoStep03SeguridadSocial({ formData, onChange, errors }
         </label>
         <input
           type="text"
-          className={`${styles.input} ${errors.includes('iban') ? styles.error : ''}`}
+          inputMode="text"
+          className={`${styles.input} ${errors.some((e) => e.startsWith('iban')) ? styles.error : ''}`}
           placeholder="ES00 0000 0000 0000 0000 0000"
           value={iban}
           onChange={(e) => onChange({ iban: e.target.value.toUpperCase() })}
         />
         {errors.includes('iban') && (
           <div className={styles.errorMsg}>⚠ Introduce el IBAN de la cuenta donde se domiciliará la cuota.</div>
+        )}
+        {errors.includes('iban_formato') && (
+          <div className={styles.errorMsg}>
+            ⚠ Un IBAN español empieza por ES seguido de 22 cifras (24 caracteres en total).
+            Revisa que no falte ni sobre ningún número.
+          </div>
+        )}
+        {errors.includes('iban_digitoControl') && (
+          <div className={styles.errorMsg}>
+            ⚠ Ese IBAN no es correcto: tiene la longitud adecuada pero no supera la
+            comprobación del banco. Suele ser una cifra cambiada de sitio; cópialo de tu
+            app bancaria para asegurarte.
+          </div>
         )}
       </div>
 

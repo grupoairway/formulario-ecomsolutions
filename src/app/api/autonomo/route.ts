@@ -2,16 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Client } from '@notionhq/client';
 import { Resend } from 'resend';
 import { AutonomoFormData, FileAttachment } from '@/lib/types-autonomo';
+import { fechaParaNotion } from '@/lib/fechas';
+import { normalizarIban } from '@/lib/iban';
 
 const notion = new Client({ auth: process.env.NOTION_TOKEN });
 
+/** Límite de Notion para cualquier bloque de texto, título incluido. */
+const MAX_TEXTO_NOTION = 2000;
+
 function richText(content: string) {
-  const text = content ? content.slice(0, 2000) : '';
+  const text = content ? content.slice(0, MAX_TEXTO_NOTION) : '';
   return [{ text: { content: text } }];
 }
 
 function getTitle(data: AutonomoFormData): string {
-  return `${data.nombreCompleto || 'Sin nombre'} - Alta Autónomo`;
+  // El título también está sujeto al límite de 2000: sin recortar, un nombre
+  // muy largo hacía que Notion devolviese 400 y se perdiera la captación.
+  return `${data.nombreCompleto || 'Sin nombre'} - Alta Autónomo`.slice(0, MAX_TEXTO_NOTION);
+}
+
+/** Parsea un importe sin asumir que llega como string. */
+function numeroONull(valor: unknown): number | null {
+  const texto = typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
+  const n = parseFloat(texto.replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
 }
 
 function domicilioTexto(data: AutonomoFormData): string {
@@ -229,8 +243,36 @@ function tipoDocLabel(tipo: string): string {
 async function createNotionPage(data: AutonomoFormData): Promise<void> {
   const dbId = process.env.NOTION_AUTONOMOS_DB || '35f774ba279980eda676edcd6172c0d1';
   const today = new Date().toISOString().split('T')[0];
-  const fechaInicio = data.cuantoAntes ? today : (data.fechaInicio || today);
-  const ingresos = parseFloat(data.ingresosNetos.replace(',', '.'));
+
+  // ── Saneado de fechas ──────────────────────────────────────────────────────
+  // Una fecha mal formada (p. ej. un año de 5 cifras tecleado en el móvil) hace
+  // que Notion rechace la propiedad `date` y tumbe la escritura ENTERA. A estas
+  // alturas el cliente ya ha rellenado 5 pasos y subido el DNI, así que se
+  // guarda el registro sin esa fecha en vez de perder la captación. El valor
+  // crudo se deja en `Notas` para que no sea una pérdida silenciosa.
+  const avisos: string[] = [];
+
+  const fechaNacimiento = fechaParaNotion(data.fechaNacimiento);
+  if (data.fechaNacimiento && !fechaNacimiento) {
+    avisos.push(`Fecha de nacimiento recibida inválida: "${String(data.fechaNacimiento).slice(0, 100)}"`);
+  }
+
+  const fechaInicioSaneada = fechaParaNotion(data.fechaInicio);
+  if (!data.cuantoAntes && data.fechaInicio && !fechaInicioSaneada) {
+    avisos.push(`Fecha de inicio recibida inválida: "${String(data.fechaInicio).slice(0, 100)}"`);
+  }
+  const fechaInicio = data.cuantoAntes ? today : (fechaInicioSaneada || today);
+
+  const ingresos = numeroONull(data.ingresosNetos);
+  if (data.ingresosNetos && ingresos === null) {
+    avisos.push(`Ingresos mensuales recibidos ilegibles: "${String(data.ingresosNetos).slice(0, 100)}"`);
+  }
+
+  const iban = normalizarIban(String(data.iban ?? ''));
+
+  if (avisos.length) {
+    console.error('[/api/autonomo] Datos saneados antes de guardar:', avisos);
+  }
 
   await notion.pages.create({
     parent: { database_id: dbId },
@@ -245,7 +287,7 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
         date: { start: today },
       },
       'Fecha nacimiento': {
-        date: data.fechaNacimiento ? { start: data.fechaNacimiento } : null,
+        date: fechaNacimiento ? { start: fechaNacimiento } : null,
       },
       'Nacionalidad': {
         rich_text: richText(data.nacionalidad),
@@ -287,14 +329,17 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
         rich_text: richText(data.mutua),
       },
       'IBAN': {
-        rich_text: richText(data.iban),
+        rich_text: richText(iban),
       },
       'Ingresos mensuales': {
-        number: isNaN(ingresos) ? null : ingresos,
+        number: ingresos,
       },
       'Tarifa reducida': {
         checkbox: data.noAltaDosAnios && data.sinDeudasSS,
       },
+      ...(avisos.length
+        ? { 'Notas': { rich_text: richText(`⚠ Revisar: ${avisos.join(' · ')}`) } }
+        : {}),
     } as Parameters<typeof notion.pages.create>[0]['properties'],
   });
 }

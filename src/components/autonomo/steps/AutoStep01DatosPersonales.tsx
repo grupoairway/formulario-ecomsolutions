@@ -2,6 +2,7 @@
 
 import { AutonomoFormData, DomicilioAutonomo, ESTADOS_CIVILES_AUTONOMO, ESTADOS_CON_FECHA } from '@/lib/types-autonomo';
 import { PROVINCIAS } from '@/lib/types';
+import { minNacimiento, maxNacimiento, hoyISO } from '@/lib/fechas';
 import styles from '../../steps/steps.module.css';
 
 interface Props {
@@ -51,12 +52,23 @@ export default function AutoStep01DatosPersonales({ formData, onChange, errors }
           </label>
           <input
             type="date"
-            className={`${styles.input} ${errors.includes('fechaNacimiento') ? styles.error : ''}`}
+            min={minNacimiento()}
+            max={maxNacimiento()}
+            className={`${styles.input} ${errors.some((e) => e.startsWith('fechaNacimiento')) ? styles.error : ''}`}
             value={formData.fechaNacimiento}
             onChange={(e) => onChange({ fechaNacimiento: e.target.value })}
           />
           {errors.includes('fechaNacimiento') && (
             <div className={styles.errorMsg}>⚠ Indica tu fecha de nacimiento.</div>
+          )}
+          {errors.includes('fechaNacimiento_formato') && (
+            <div className={styles.errorMsg}>⚠ La fecha no es válida. Revisa que el año tenga 4 cifras.</div>
+          )}
+          {errors.includes('fechaNacimiento_menor') && (
+            <div className={styles.errorMsg}>⚠ Debes ser mayor de edad para darte de alta como autónomo.</div>
+          )}
+          {errors.includes('fechaNacimiento_antigua') && (
+            <div className={styles.errorMsg}>⚠ Revisa el año: esa fecha es demasiado antigua.</div>
           )}
         </div>
         <div>
@@ -410,10 +422,21 @@ export default function AutoStep01DatosPersonales({ formData, onChange, errors }
             </label>
             <input
               type="date"
-              className={styles.input}
+              min={minNacimiento()}
+              max={hoyISO()}
+              className={`${styles.input} ${errors.some((e) => e.startsWith('fechaEstadoCivil')) ? styles.error : ''}`}
               value={formData.fechaEstadoCivil}
               onChange={(e) => onChange({ fechaEstadoCivil: e.target.value })}
             />
+            {errors.includes('fechaEstadoCivil_formato') && (
+              <div className={styles.errorMsg}>⚠ La fecha no es válida. Revisa que el año tenga 4 cifras.</div>
+            )}
+            {errors.includes('fechaEstadoCivil_futura') && (
+              <div className={styles.errorMsg}>⚠ La fecha no puede estar en el futuro.</div>
+            )}
+            {errors.includes('fechaEstadoCivil_antigua') && (
+              <div className={styles.errorMsg}>⚠ Revisa el año: esa fecha es demasiado antigua.</div>
+            )}
           </div>
         )}
       </div>

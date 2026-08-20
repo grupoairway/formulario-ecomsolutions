@@ -2,6 +2,7 @@
 
 import { FormData, Socio, TipoAportacion, createEmptySocio, ESTADOS_CIVILES, SEXOS } from '@/lib/types';
 import { DireccionForm } from './DireccionForm';
+import { hoyISO, hoyMenosAnios } from '@/lib/fechas';
 import styles from './steps.module.css';
 
 interface Props {
@@ -185,12 +186,20 @@ function SocioBlock({
           </label>
           <input
             type="date"
-            className={`${styles.input} ${errors.includes(`${prefix}fecha`) ? styles.error : ''}`}
+            min={hoyMenosAnios(esPersonaFisica ? 100 : 200)}
+            max={hoyISO()}
+            className={`${styles.input} ${errors.some((e) => e.startsWith(`${prefix}fecha`) && !e.includes('Inscripcion')) ? styles.error : ''}`}
             value={socio.fechaNacimientoConstitucion}
             onChange={(e) => onUpdate({ fechaNacimientoConstitucion: e.target.value })}
           />
           {errors.includes(`${prefix}fecha`) && (
             <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+          )}
+          {errors.includes(`${prefix}fecha_invalida`) && (
+            <div className={styles.errorMsg}>
+              ⚠ La fecha no es válida. Revisa que el año tenga 4 cifras y que no esté
+              en el futuro.
+            </div>
           )}
         </div>
         <div>
@@ -218,12 +227,20 @@ function SocioBlock({
           </label>
           <input
             type="date"
-            className={`${styles.input} ${errors.includes(`${prefix}fechaInscripcion`) ? styles.error : ''}`}
+            min={hoyMenosAnios(200)}
+            max={hoyISO()}
+            className={`${styles.input} ${errors.some((e) => e.startsWith(`${prefix}fechaInscripcion`)) ? styles.error : ''}`}
             value={socio.fechaInscripcion}
             onChange={(e) => onUpdate({ fechaInscripcion: e.target.value })}
           />
           {errors.includes(`${prefix}fechaInscripcion`) && (
             <div className={styles.errorMsg}>⚠ Campo obligatorio.</div>
+          )}
+          {errors.includes(`${prefix}fechaInscripcion_invalida`) && (
+            <div className={styles.errorMsg}>
+              ⚠ La fecha no es válida. Revisa que el año tenga 4 cifras y que no esté
+              en el futuro.
+            </div>
           )}
         </div>
       )}

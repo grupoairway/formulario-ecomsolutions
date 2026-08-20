@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { AutonomoFormData, initialAutonomoFormData } from '@/lib/types-autonomo';
 import { totalUploadBytes, formatMB, MAX_TOTAL_UPLOAD_BYTES } from '@/lib/file-upload';
+import { validarNacimiento, validarNoFutura, validarInicioActividad } from '@/lib/fechas';
+import { validarIbanEspanol } from '@/lib/iban';
 import AutonomoStepIndicator from './AutonomoStepIndicator';
 import AutoStep01DatosPersonales from './steps/AutoStep01DatosPersonales';
 import AutoStep02Actividad from './steps/AutoStep02Actividad';
@@ -27,7 +29,12 @@ function validateStep(step: number, data: AutonomoFormData): string[] {
 
   if (step === 0) {
     if (!data.nombreCompleto.trim()) errors.push('nombreCompleto');
-    if (!data.fechaNacimiento) errors.push('fechaNacimiento');
+    if (!data.fechaNacimiento) {
+      errors.push('fechaNacimiento');
+    } else {
+      const err = validarNacimiento(data.fechaNacimiento);
+      if (err) errors.push(`fechaNacimiento_${err}`);
+    }
     if (!data.nacionalidad.trim()) errors.push('nacionalidad');
     if (!data.tipoDocumento) errors.push('tipoDocumento');
     if (!data.numeroDocumento.trim()) errors.push('numeroDocumento');
@@ -47,17 +54,33 @@ function validateStep(step: number, data: AutonomoFormData): string[] {
     if (!data.telefono.trim()) errors.push('telefono');
     if (!data.email.trim() || !data.email.includes('@')) errors.push('email');
     if (!data.estadoCivil) errors.push('estadoCivil');
+    if (data.fechaEstadoCivil) {
+      const err = validarNoFutura(data.fechaEstadoCivil);
+      if (err) errors.push(`fechaEstadoCivil_${err}`);
+    }
   }
 
   if (step === 1) {
     if (!data.descripcionActividad.trim()) errors.push('descripcionActividad');
-    if (!data.cuantoAntes && !data.fechaInicio) errors.push('fechaInicio');
+    if (!data.cuantoAntes) {
+      if (!data.fechaInicio) {
+        errors.push('fechaInicio');
+      } else {
+        const err = validarInicioActividad(data.fechaInicio);
+        if (err) errors.push(`fechaInicio_${err}`);
+      }
+    }
     if (data.roi === null) errors.push('roi');
   }
 
   if (step === 2) {
     if (!data.mutua) errors.push('mutua');
-    if (!data.iban.trim()) errors.push('iban');
+    if (!data.iban.trim()) {
+      errors.push('iban');
+    } else {
+      const err = validarIbanEspanol(data.iban);
+      if (err) errors.push(`iban_${err}`);
+    }
     if (!data.ingresosNetos.trim()) errors.push('ingresosNetos');
   }
 

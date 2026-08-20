@@ -1,6 +1,7 @@
 'use client';
 
 import { AutonomoFormData } from '@/lib/types-autonomo';
+import { minInicioActividad, maxInicioActividad, INICIO_DIAS_ADELANTE } from '@/lib/fechas';
 import styles from '../../steps/steps.module.css';
 
 interface Props {
@@ -51,13 +52,24 @@ export default function AutoStep02Actividad({ formData, onChange, errors }: Prop
         {!cuantoAntes && (
           <input
             type="date"
-            className={`${styles.input} ${errors.includes('fechaInicio') ? styles.error : ''}`}
+            min={minInicioActividad()}
+            max={maxInicioActividad()}
+            className={`${styles.input} ${errors.some((e) => e.startsWith('fechaInicio')) ? styles.error : ''}`}
             value={fechaInicio}
             onChange={(e) => onChange({ fechaInicio: e.target.value })}
           />
         )}
         {errors.includes('fechaInicio') && (
           <div className={styles.errorMsg}>⚠ Selecciona la fecha de inicio o marca &ldquo;cuanto antes&rdquo;.</div>
+        )}
+        {errors.includes('fechaInicio_formato') && (
+          <div className={styles.errorMsg}>⚠ La fecha no es válida. Revisa que el año tenga 4 cifras.</div>
+        )}
+        {errors.includes('fechaInicio_rango') && (
+          <div className={styles.errorMsg}>
+            ⚠ El alta se tramita con un máximo de {INICIO_DIAS_ADELANTE} días de antelación.
+            Elige una fecha más cercana o marca &ldquo;cuanto antes&rdquo;.
+          </div>
         )}
         <div className={styles.infoNote} style={{ marginTop: 10 }}>
           <span className={styles.infoNoteIcon}>ℹ️</span>

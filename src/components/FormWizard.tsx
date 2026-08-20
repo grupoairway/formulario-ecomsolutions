@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { FormData, DireccionDetallada, initialFormData, createEmptySocio, createEmptyAdministrador } from '@/lib/types';
+import { esFechaValida, validarNoFutura, validarEnRango, hoyMasDias } from '@/lib/fechas';
 import StepIndicator from './StepIndicator';
 import Step01Denominacion from './steps/Step01Denominacion';
 import Step02Empresa from './steps/Step02Empresa';
@@ -52,6 +53,10 @@ function validateStep(step: number, data: FormData): string[] {
     if (!data.actividadPrincipal.trim()) errors.push('actividadPrincipal');
     if (data.roi === null) errors.push('roi');
     if (!data.cierreEjercicio.trim()) errors.push('cierreEjercicio');
+    // Opcional, pero si viene tiene que ser una fecha real y sensata.
+    if (data.fechaInicioActividad && validarEnRango(data.fechaInicioActividad, hoyMasDias(-30), hoyMasDias(365))) {
+      errors.push('fechaInicioActividad');
+    }
     if (data.duracionSociedad === 'determinada' && !data.duracionAnios.trim())
       errors.push('duracionAnios');
   }
@@ -86,11 +91,19 @@ function validateStep(step: number, data: FormData): string[] {
       if (esFisica && !s.sexo) errors.push(`${p}sexo`);
       if (!s.documento.trim()) errors.push(`${p}documento`);
       if (i === 0 && !s.email.trim()) errors.push(`${p}email`);
-      if (!s.fechaNacimientoConstitucion) errors.push(`${p}fecha`);
+      if (!s.fechaNacimientoConstitucion) {
+        errors.push(`${p}fecha`);
+      } else if (validarNoFutura(s.fechaNacimientoConstitucion, esFisica ? 100 : 200)) {
+        errors.push(`${p}fecha_invalida`);
+      }
       if (!s.nacionalidad.trim()) errors.push(`${p}nacionalidad`);
       if (esFisica && !s.estadoCivil) errors.push(`${p}estadoCivil`);
       if (!esFisica) {
-        if (!s.fechaInscripcion) errors.push(`${p}fechaInscripcion`);
+        if (!s.fechaInscripcion) {
+          errors.push(`${p}fechaInscripcion`);
+        } else if (validarNoFutura(s.fechaInscripcion, 200)) {
+          errors.push(`${p}fechaInscripcion_invalida`);
+        }
         if (!s.representanteNombre.trim()) errors.push(`${p}representanteNombre`);
         if (!s.representanteDocumento.trim()) errors.push(`${p}representanteDocumento`);
       }

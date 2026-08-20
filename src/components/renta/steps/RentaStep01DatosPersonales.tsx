@@ -2,6 +2,7 @@
 
 import { RentaFormData, DomicilioRenta, ESTADOS_CIVILES_RENTA, CLAVE_CERTIFICADO_OPTIONS } from '@/lib/types-renta';
 import { PROVINCIAS } from '@/lib/types';
+import { minNacimiento, hoyISO } from '@/lib/fechas';
 import styles from '../../steps/steps.module.css';
 
 interface Props {
@@ -59,12 +60,23 @@ export default function RentaStep01DatosPersonales({ formData, onChange, errors 
           </label>
           <input
             type="date"
-            className={`${styles.input} ${errors.includes('fechaNacimiento') ? styles.error : ''}`}
+            min={minNacimiento()}
+            max={hoyISO()}
+            className={`${styles.input} ${errors.some((e) => e.startsWith('fechaNacimiento')) ? styles.error : ''}`}
             value={formData.fechaNacimiento}
             onChange={(e) => onChange({ fechaNacimiento: e.target.value })}
           />
           {errors.includes('fechaNacimiento') && (
             <div className={styles.errorMsg}>⚠ Indica tu fecha de nacimiento.</div>
+          )}
+          {errors.includes('fechaNacimiento_formato') && (
+            <div className={styles.errorMsg}>⚠ La fecha no es válida. Revisa que el año tenga 4 cifras.</div>
+          )}
+          {errors.includes('fechaNacimiento_futura') && (
+            <div className={styles.errorMsg}>⚠ La fecha de nacimiento no puede estar en el futuro.</div>
+          )}
+          {errors.includes('fechaNacimiento_antigua') && (
+            <div className={styles.errorMsg}>⚠ Revisa el año: esa fecha es demasiado antigua.</div>
           )}
         </div>
       </div>

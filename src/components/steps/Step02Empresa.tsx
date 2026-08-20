@@ -1,6 +1,7 @@
 'use client';
 
 import { FormData } from '@/lib/types';
+import { hoyMasDias } from '@/lib/fechas';
 import styles from './steps.module.css';
 
 interface Props {
@@ -186,10 +187,18 @@ export default function Step02Empresa({ formData, onChange, errors }: Props) {
         <label className={styles.label}>Fecha de inicio de actividad (opcional)</label>
         <input
           type="date"
-          className={styles.input}
+          min={hoyMasDias(-30)}
+          max={hoyMasDias(365)}
+          className={`${styles.input} ${errors.includes('fechaInicioActividad') ? styles.error : ''}`}
           value={fechaInicioActividad}
           onChange={(e) => onChange({ fechaInicioActividad: e.target.value })}
         />
+        {errors.includes('fechaInicioActividad') && (
+          <div className={styles.errorMsg}>
+            ⚠ La fecha no es válida. Revisa que el año tenga 4 cifras y que esté dentro
+            del próximo año.
+          </div>
+        )}
         <div className={styles.infoNote} style={{ marginTop: 10 }}>
           <span className={styles.infoNoteIcon}>ℹ️</span>
           Si quieres operar desde el momento de constitución, déjalo en blanco.
