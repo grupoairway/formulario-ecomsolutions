@@ -220,13 +220,6 @@ async function sendEmails(data: AutonomoFormData) {
   }
 }
 
-function normalizeMutua(mutua: string): string {
-  const upper = mutua.toUpperCase();
-  if (upper.includes('ASEPEYO')) return 'ASEPEYO';
-  if (upper.includes('FREMAP')) return 'FREMAP';
-  return 'Otra';
-}
-
 function tipoDocLabel(tipo: string): string {
   if (tipo === 'dni') return 'DNI';
   if (tipo === 'nie_comunitario') return 'NIE comunitario';
@@ -235,7 +228,7 @@ function tipoDocLabel(tipo: string): string {
 }
 
 async function createNotionPage(data: AutonomoFormData): Promise<void> {
-  const dbId = process.env.NOTION_AUTONOMOS_DB || '365774ba2799801094aaf402e58fa87e';
+  const dbId = process.env.NOTION_AUTONOMOS_DB || '35f774ba279980eda676edcd6172c0d1';
   const today = new Date().toISOString().split('T')[0];
   const fechaInicio = data.cuantoAntes ? today : (data.fechaInicio || today);
   const ingresos = parseFloat(data.ingresosNetos.replace(',', '.'));
@@ -247,9 +240,9 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
         title: [{ text: { content: getTitle(data) } }],
       },
       'Estado': {
-        select: { name: 'Nuevo' },
+        select: { name: 'Documentación recibida' },
       },
-      'Fecha envío': {
+      'Fecha solicitud': {
         date: { start: today },
       },
       'Fecha nacimiento': {
@@ -282,7 +275,7 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
       'Fecha inicio': {
         date: { start: fechaInicio },
       },
-      'ROI': {
+      'ROI intracomunitario': {
         checkbox: data.roi === true,
       },
       'Epígrafe IAE': {
@@ -292,7 +285,7 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
         rich_text: richText(data.numeroAfiliacionSS),
       },
       'Mutua': {
-        select: data.mutua ? { name: normalizeMutua(data.mutua) } : null,
+        rich_text: richText(data.mutua),
       },
       'IBAN': {
         rich_text: richText(data.iban),
@@ -308,32 +301,38 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
 }
 
 export async function POST(request: NextRequest) {
+  let data: AutonomoFormData;
   try {
-    const data: AutonomoFormData = await request.json();
-
-    // Diagnóstico de archivos adjuntos
-    console.log('[/api/autonomo] Adjuntos recibidos:', {
-      dniAnverso:    data.dniAnverso    ? { name: data.dniAnverso.name,    size: data.dniAnverso.size,    type: data.dniAnverso.type,    dataLen: data.dniAnverso.data?.length ?? 0 }    : null,
-      dniReverso:    data.dniReverso    ? { name: data.dniReverso.name,    size: data.dniReverso.size,    type: data.dniReverso.type,    dataLen: data.dniReverso.data?.length ?? 0 }    : null,
-      permisoTrabajo: data.permisoTrabajo ? { name: data.permisoTrabajo.name, size: data.permisoTrabajo.size, type: data.permisoTrabajo.type, dataLen: data.permisoTrabajo.data?.length ?? 0 } : null,
-    });
-
-    // Notion y email son independientes: un fallo en Notion no bloquea el envío de emails
-    await createNotionPage(data).catch((err: { code?: string; message?: string; body?: string }) => {
-      console.error('[/api/autonomo] Notion FAILED —', {
-        code: err?.code,
-        message: err?.message,
-        body: err?.body,
-      });
-    });
-
-    await sendEmails(data).catch((err: { message?: string }) => {
-      console.error('[/api/autonomo] Email FAILED —', err?.message);
-    });
-
-    return NextResponse.json({ success: true });
-  } catch (err) {
-    console.error('[/api/autonomo] Fatal error:', err);
-    return NextResponse.json({ error: 'Error interno del servidor' }, { status: 500 });
+    data = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'JSON inválido' }, { status: 400 });
   }
+
+  // Diagnóstico de archivos adjuntos
+  console.log('[/api/autonomo] Adjuntos recibidos:', {
+    dniAnverso:    data.dniAnverso    ? { name: data.dniAnverso.name,    size: data.dniAnverso.size,    type: data.dniAnverso.type,    dataLen: data.dniAnverso.data?.length ?? 0 }    : null,
+    dniReverso:    data.dniReverso    ? { name: data.dniReverso.name,    size: data.dniReverso.size,    type: data.dniReverso.type,    dataLen: data.dniReverso.data?.length ?? 0 }    : null,
+    permisoTrabajo: data.permisoTrabajo ? { name: data.permisoTrabajo.name, size: data.permisoTrabajo.size, type: data.permisoTrabajo.type, dataLen: data.permisoTrabajo.data?.length ?? 0 } : null,
+  });
+
+  // ── Notion = CRÍTICO. Si falla, 500 con el mensaje real. NUNCA success silencioso ──
+  // (pérdida de datos silenciosa: un fallo aquí debe bloquear la captura y avisar).
+  try {
+    await createNotionPage(data);
+  } catch (err) {
+    const e = err as { code?: string; message?: string; body?: unknown };
+    // Log permanente del body completo de Notion (visible en logs de Vercel).
+    console.error('[/api/autonomo] Notion error:', JSON.stringify(e?.body || e, null, 2));
+    return NextResponse.json(
+      { error: 'No se pudo guardar la solicitud en Notion', detail: e?.message || 'Error desconocido' },
+      { status: 500 },
+    );
+  }
+
+  // ── Emails = best-effort. Loguean pero NO bloquean la captura ya guardada en Notion ──
+  await sendEmails(data).catch((err: { message?: string }) => {
+    console.error('[/api/autonomo] Email FAILED (best-effort, no bloquea):', err?.message);
+  });
+
+  return NextResponse.json({ success: true });
 }
