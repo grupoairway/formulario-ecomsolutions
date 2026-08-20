@@ -21,6 +21,11 @@ function getTitle(data: AutonomoFormData): string {
   return `${data.nombreCompleto || 'Sin nombre'} - Alta Autónomo`.slice(0, MAX_TEXTO_NOTION);
 }
 
+/** Un select solo se envía si tiene valor: Notion rechaza `name` vacío. */
+function selectONull(valor: string | undefined | null) {
+  return valor && valor.trim() ? { name: valor.trim() } : null;
+}
+
 /** Parsea un importe sin asumir que llega como string. */
 function numeroONull(valor: unknown): number | null {
   const texto = typeof valor === 'number' ? String(valor) : typeof valor === 'string' ? valor : '';
@@ -268,7 +273,26 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
     avisos.push(`Ingresos mensuales recibidos ilegibles: "${String(data.ingresosNetos).slice(0, 100)}"`);
   }
 
+  const fechaEstadoCivil = fechaParaNotion(data.fechaEstadoCivil);
+  if (data.fechaEstadoCivil && !fechaEstadoCivil) {
+    avisos.push(`Fecha de estado civil recibida inválida: "${String(data.fechaEstadoCivil).slice(0, 100)}"`);
+  }
+
   const iban = normalizarIban(String(data.iban ?? ''));
+
+  // El centro de actividad se guarda SIEMPRE con sus valores reales: cuando
+  // coincide con el domicilio se copian los de este. El checkbox dice si el
+  // cliente lo declaró como el mismo, pero las columnas quedan listas para
+  // volcarlas al 036 y al TA.0521 sin tener que cruzar datos a mano.
+  const coincide = data.mismoCentroActividad === true;
+  const dom = data.domicilio;
+  const centro = data.centroActividad;
+  const centroDireccion = coincide
+    ? [dom.calle, dom.numero, dom.piso].filter(Boolean).join(', ')
+    : centro.direccion;
+  const centroCp = coincide ? dom.cp : centro.cp;
+  const centroMunicipio = coincide ? dom.municipio : centro.municipio;
+  const centroProvincia = coincide ? dom.provincia : centro.provincia;
 
   if (avisos.length) {
     console.error('[/api/autonomo] Datos saneados antes de guardar:', avisos);
@@ -298,8 +322,46 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
       'Tipo documento': {
         select: { name: tipoDocLabel(data.tipoDocumento) },
       },
+      // Se mantiene la versión concatenada para leer de un vistazo, y además
+      // el desglose, que es lo que piden el 036 y el TA.0521 por campos.
       'Domicilio': {
         rich_text: richText(domicilioTexto(data)),
+      },
+      'Domicilio — vía': {
+        rich_text: richText(dom.calle),
+      },
+      'Domicilio — número': {
+        rich_text: richText(dom.numero),
+      },
+      'Domicilio — piso': {
+        rich_text: richText(dom.piso),
+      },
+      'Domicilio — CP': {
+        rich_text: richText(dom.cp),
+      },
+      'Domicilio — municipio': {
+        rich_text: richText(dom.municipio),
+      },
+      'Domicilio — provincia': {
+        select: selectONull(dom.provincia),
+      },
+      'Centro actividad — coincide con domicilio': {
+        checkbox: coincide,
+      },
+      'Centro actividad — dirección': {
+        rich_text: richText(centroDireccion),
+      },
+      'Centro actividad — CP': {
+        rich_text: richText(centroCp),
+      },
+      'Centro actividad — municipio': {
+        rich_text: richText(centroMunicipio),
+      },
+      'Centro actividad — provincia': {
+        select: selectONull(centroProvincia),
+      },
+      'Centro actividad — m²': {
+        number: numeroONull(centro.m2),
       },
       'Teléfono': {
         phone_number: data.telefono || null,
@@ -308,7 +370,10 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
         email: data.email || null,
       },
       'Estado civil': {
-        select: data.estadoCivil ? { name: data.estadoCivil } : null,
+        select: selectONull(data.estadoCivil),
+      },
+      'Fecha estado civil': {
+        date: fechaEstadoCivil ? { start: fechaEstadoCivil } : null,
       },
       'Actividad': {
         rich_text: richText(data.descripcionActividad),
@@ -334,8 +399,16 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
       'Ingresos mensuales': {
         number: ingresos,
       },
+      // Se conserva el AND calculado (hay vistas y filtros montados sobre él)
+      // y además se guarda cada requisito por separado.
       'Tarifa reducida': {
         checkbox: data.noAltaDosAnios && data.sinDeudasSS,
+      },
+      'Sin alta en RETA últimos 2 años': {
+        checkbox: data.noAltaDosAnios === true,
+      },
+      'Sin deudas con la Seguridad Social': {
+        checkbox: data.sinDeudasSS === true,
       },
       ...(avisos.length
         ? { 'Notas': { rich_text: richText(`⚠ Revisar: ${avisos.join(' · ')}`) } }
