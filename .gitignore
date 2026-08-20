@@ -13,6 +13,9 @@ out/
 build/
 dist/
 
+# typescript (cache incremental: se regenera en cada build)
+*.tsbuildinfo
+
 # misc
 .DS_Store
 *.pem
