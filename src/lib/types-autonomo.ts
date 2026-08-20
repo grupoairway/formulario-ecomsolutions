@@ -44,7 +44,6 @@ export interface AutonomoFormData {
   fechaInicio: string;
   cuantoAntes: boolean;
   roi: boolean | null;
-  epigrafeIAE: string;
 
   // Step 3 - Seguridad Social
   numeroAfiliacionSS: string;
@@ -80,7 +79,6 @@ export const initialAutonomoFormData: AutonomoFormData = {
   fechaInicio: '',
   cuantoAntes: false,
   roi: null,
-  epigrafeIAE: '',
   numeroAfiliacionSS: '',
   mutua: '',
   iban: '',

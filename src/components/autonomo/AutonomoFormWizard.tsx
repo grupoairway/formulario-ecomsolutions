@@ -53,7 +53,6 @@ function validateStep(step: number, data: AutonomoFormData): string[] {
     if (!data.descripcionActividad.trim()) errors.push('descripcionActividad');
     if (!data.cuantoAntes && !data.fechaInicio) errors.push('fechaInicio');
     if (data.roi === null) errors.push('roi');
-    if (!data.epigrafeIAE.trim()) errors.push('epigrafeIAE');
   }
 
   if (step === 2) {

@@ -10,7 +10,7 @@ interface Props {
 }
 
 export default function AutoStep02Actividad({ formData, onChange, errors }: Props) {
-  const { descripcionActividad, fechaInicio, cuantoAntes, roi, epigrafeIAE } = formData;
+  const { descripcionActividad, fechaInicio, cuantoAntes, roi } = formData;
 
   return (
     <div>
@@ -29,6 +29,10 @@ export default function AutoStep02Actividad({ formData, onChange, errors }: Prop
         {errors.includes('descripcionActividad') && (
           <div className={styles.errorMsg}>⚠ Describe la actividad que vas a ejercer.</div>
         )}
+        <div className={styles.infoNote} style={{ marginTop: 10 }}>
+          <span className={styles.infoNoteIcon}>ℹ️</span>
+          No necesitas saber el epígrafe IAE: nuestro gestor lo asignará a partir de tu descripción.
+        </div>
       </div>
 
       {/* Fecha de inicio */}
@@ -92,28 +96,6 @@ export default function AutoStep02Actividad({ formData, onChange, errors }: Prop
         </div>
       </div>
 
-      {/* Epígrafe IAE */}
-      <div className={styles.fieldGroup}>
-        <label className={styles.label}>
-          Epígrafe IAE <span className={styles.required}>*</span>
-        </label>
-        <input
-          type="text"
-          className={`${styles.input} ${errors.includes('epigrafeIAE') ? styles.error : ''}`}
-          placeholder="Ej: 764 - Servicios de telecomunicaciones"
-          value={epigrafeIAE}
-          onChange={(e) => onChange({ epigrafeIAE: e.target.value })}
-        />
-        {errors.includes('epigrafeIAE') && (
-          <div className={styles.errorMsg}>⚠ Introduce el epígrafe IAE de tu actividad.</div>
-        )}
-        <div className={styles.infoNote} style={{ marginTop: 10 }}>
-          <span className={styles.infoNoteIcon}>ℹ️</span>
-          El Impuesto de Actividades Económicas (IAE) clasifica tu actividad. Si no sabes
-          cuál te corresponde, escribe una descripción de tu actividad y nuestro equipo
-          determinará el epígrafe correcto.
-        </div>
-      </div>
     </div>
   );
 }

@@ -101,7 +101,6 @@ export default function AutoStep05Resumen({ formData, onChange, errors }: Props)
           value={formData.cuantoAntes ? 'Cuanto antes posible' : formData.fechaInicio}
         />
         <Row label="ROI intracomunitario" value={formData.roi} />
-        <Row label="Epígrafe IAE" value={formData.epigrafeIAE} />
       </Section>
 
       <Section title="3. Seguridad Social">

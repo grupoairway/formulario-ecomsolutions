@@ -151,8 +151,7 @@ async function sendEmails(data: AutonomoFormData) {
               ${section('Actividad',
                 row('Descripción', data.descripcionActividad) +
                 row('Fecha inicio', data.cuantoAntes ? 'Cuanto antes posible' : data.fechaInicio) +
-                row('ROI intracomunitario', data.roi ? 'Sí' : 'No') +
-                row('Epígrafe IAE', data.epigrafeIAE)
+                row('ROI intracomunitario', data.roi ? 'Sí' : 'No')
               )}
 
               ${section('Seguridad Social',
@@ -278,9 +277,9 @@ async function createNotionPage(data: AutonomoFormData): Promise<void> {
       'ROI intracomunitario': {
         checkbox: data.roi === true,
       },
-      'Epígrafe IAE': {
-        rich_text: richText(data.epigrafeIAE),
-      },
+      // 'Epígrafe IAE' se deja sin enviar a propósito: la columna sigue en la
+      // base de datos y la rellena el gestor al tramitar. El cliente no sabe
+      // qué epígrafe le corresponde y escribía cualquier cosa.
       'Nº afiliación SS': {
         rich_text: richText(data.numeroAfiliacionSS),
       },
